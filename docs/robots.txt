@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://manukeneko.github.io/sitemap.xml/sitemap.xml

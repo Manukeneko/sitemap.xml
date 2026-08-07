@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}} | 検定練習アプリ</title>
+<meta name="description" content="{{DESCRIPTION}}">
+<link rel="canonical" href="{{CANONICAL}}">
+<link rel="stylesheet" href="../../assets/style.css">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:type" content="website">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <a class="logo" href="../../index.html">検定<span>ラボ</span></a>
+    <a href="../../index.html" style="color:var(--text-dim);font-size:14px;text-decoration:none;">← 検定一覧</a>
+  </header>
+
+  <div class="hero">
+    <span class="badge">{{CATEGORY}}</span>
+    <h1>{{TITLE}}</h1>
+    <p>{{DESCRIPTION}}</p>
+  </div>
+
+  <div id="quiz-root"></div>
+
+  <footer class="site">無料の検定練習アプリです。実際の試験内容とは異なる場合があります。</footer>
+</div>
+
+<script type="application/json" id="quiz-data">{{QUIZ_JSON}}</script>
+<script src="../../assets/quiz.js"></script>
+</body>
+</html>
