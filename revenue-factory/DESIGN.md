@@ -1,6 +1,6 @@
 # AI収益工場 全体設計書
 
-version: 0.1 (Phase 1 実装時点)
+version: 0.2 (Phase 2 実装時点)
 最終更新: 2026-08-08
 
 > 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
@@ -188,7 +188,10 @@ revenue-factory/
       api/
         research/run/route.ts     市場調査AI実行 → topics保存
         topics/route.ts           topics一覧取得
+        topics/[id]/route.ts      topics詳細 + contents取得
         topics/[id]/plan/route.ts コンテンツ企画AI実行 → contents保存
+        contents/[id]/generate/route.ts 媒体別AIで台本・原稿を詳細生成（draft→review）
+        contents/[id]/approve/route.ts  人間確認完了（review→approved）
     lib/
       db.ts                  Prisma Client シングルトン
       ai/
@@ -209,6 +212,11 @@ revenue-factory/
         engine.ts            収益性スコアリングエンジン（§10.3相当）
       planning/
         contentPlanner.ts    コンテンツ企画AI（§10.5相当）
+      generators/            媒体別AI（Phase2）。1ファイル追加で新媒体を拡張できる
+        types.ts             ContentGeneratorSpec 共通インターフェース
+        runner.ts            Claude呼び出し+コスト記録の共通処理
+        youtube.ts / instagram.ts / tiktok.ts / x.ts / note.ts / blog.ts
+        index.ts              platform → spec のレジストリ
     components/
       TopicTable.tsx
       StatCard.tsx
@@ -242,8 +250,16 @@ Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照
 | 市場調査AI | **実装** (`lib/research/aggregator.ts` + Claude) | 複数ソースの信号を集約し「今作る価値があるテーマ」を抽出 |
 | 収益性スコアリングAI | **実装** (`lib/scoring/engine.ts`) | 検索需要・SNS需要・競合度等を統合し総合収益期待値を算出 |
 | コンテンツ企画AI | **実装** (`lib/planning/contentPlanner.ts`) | Topicから媒体別企画を生成 |
-| YouTube/Instagram/TikTok/X/note/SEOブログ/アフィリエイト/商品開発/アプリ開発AI | Phase2〜6で順次実装 | 各媒体特化のコンテンツ生成・最適化 |
+| YouTube AI（長尺・Shorts） | **実装** (`lib/generators/youtube.ts`) | 台本・フック・概要欄・サムネ案・Shorts複数本を生成 |
+| Instagram AI（Reels・カルーセル） | **実装** (`lib/generators/instagram.ts`) | 台本・スライド構成・キャプションを生成 |
+| TikTok AI | **実装** (`lib/generators/tiktok.ts`) | 冒頭フック重視の台本を生成 |
+| X AI（通常投稿・スレッド） | **実装** (`lib/generators/x.ts`) | 価値提供→自然な誘導の投稿・スレッドを生成 |
+| note AI（無料・有料記事） | **実装** (`lib/generators/note.ts`) | 無料→有料への導線を意識した記事を生成 |
+| SEOブログAI | **実装** (`lib/generators/blog.ts`) | 見出し・FAQ・メタディスクリプション込みの記事を生成 |
+| アフィリエイトAI/商品開発AI/アプリ開発AI | Phase4・Phase6で実装 | 商品選定・自社商品企画・アプリ化判断 |
 | 品質チェックAI | Phase6で実装 | 投稿前チェック（§20相当） |
+
+媒体別AIは `lib/generators/` に「共通インターフェース (`ContentGeneratorSpec`) + プラットフォームごとのプロンプト定義」として実装しており、`lib/generators/index.ts` のレジストリに1行追加するだけで新しい媒体を追加できる（拡張可能設計）。生成された台本・原稿は `Content.body` にJSON文字列として保存し、`Content.status` を `draft`（企画のみ）→`review`（詳細生成済み・要確認）→`approved`（承認済み。実際の自動投稿はPhase5のPublisherで実装）と遷移させる。これはSAFE MODE（§13）の「AI生成→人間確認→投稿」の最初の2段階に対応する。
 
 各エージェントは「Claude APIへの特定用途プロンプト + 入出力スキーマ」として実装し、将来的にAI Routerが呼び出し先モデルを切り替えられるようにする。
 
@@ -348,8 +364,8 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 
 | Phase | 内容 | 本実装での状況 |
 |---|---|---|
-| 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **本コミットで実装** |
-| 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・X・note・ブログ） | 未着手 |
+| 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
+| 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
 | 3 | 画像・動画・音声生成API選定・連携 | 未着手 |
 | 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | 未着手 |
 | 5 | 投稿API連携（SAFE MODE中心） | 未着手 |
