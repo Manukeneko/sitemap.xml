@@ -1,0 +1,361 @@
+# AI収益工場 全体設計書
+
+version: 0.1 (Phase 1 実装時点)
+最終更新: 2026-08-08
+
+> 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
+
+---
+
+## 1. 全体設計
+
+### 1.1 目的
+
+複数のAI・API・自動化技術を組み合わせ、以下のループを可能な限り自動化する。
+
+```
+市場調査 → 収益性判断 → コンテンツ企画 → コンテンツ制作
+  → 各媒体向け変換 → 品質チェック → 投稿予約/投稿
+  → アクセス・収益分析 → 自己改善 → 次の企画へ
+```
+
+「大量生産」ではなく「1つのリサーチから、各媒体に最適化された複数のオリジナルコンテンツを効率よく展開し、収益期待値の高いものから作る」ことを目標とする。
+
+### 1.2 設計方針
+
+- **段階的リリース**: Phase 1〜9 で機能を積み上げる（後述 §16）。いきなり全自動化しない。
+- **無料/低コスト優先**: 個人〜小規模チームでの運用を想定し、無料枠・低コストAPIを優先採用。有料化は収益が出てから。
+- **モジュール化**: 新しいAI・SNS・収益源を追加できるよう、コネクタ（Source/Publisher）インターフェースで抽象化。
+- **人間承認を挟む**: SAFE MODE → SEMI AUTO → FULL AUTO の3段階（§13）。
+- **コスト可視化**: すべてのAI呼び出しをコスト記録し、収益と比較して継続/停止を判断できるようにする（§14）。
+
+### 1.3 全体アーキテクチャ図
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Discord (操作パネル / Phase 8)                │
+└───────────────────────────────┬───────────────────────────────────┘
+                                 │ slash commands / webhook
+┌────────────────────────────────▼───────────────────────────────────┐
+│                  Webダッシュボード (Next.js / Vercel)                  │
+│  今日の実績・収益期待値ランキング・コンテンツ承認・AI判断ログ              │
+└───────────────────────────────┬───────────────────────────────────┘
+                                 │ REST API (Next.js Route Handlers)
+┌────────────────────────────────▼───────────────────────────────────┐
+│                        AIエージェント層 (§10)                         │
+│  AI CEO / 市場調査AI / スコアリングAI / 企画AI / 媒体別AI / 品質AI     │
+│  → AI Router (§11.4) がタスクごとに最適なAI/APIを選択                │
+└───────────────────────────────┬───────────────────────────────────┘
+        ┌────────────────────────┼────────────────────────┐
+        ▼                        ▼                         ▼
+┌───────────────┐     ┌──────────────────┐      ┌─────────────────────┐
+│  データ収集層    │     │   コンテンツ生成層   │      │   投稿・収益連携層     │
+│ (§11.2 Sources) │     │ (テキスト/画像/音声) │      │ (§13 Publishers)     │
+│ Google Trends    │     │ Claude API         │      │ YouTube / X / note   │
+│ YouTube Data API │     │ 画像・音声・動画API   │      │ Instagram / TikTok   │
+│ Amazon/楽天 API   │     │                    │      │ Amazon/楽天アフィリ    │
+└───────────────┘     └──────────────────┘      └─────────────────────┘
+                                 │
+┌────────────────────────────────▼───────────────────────────────────┐
+│           PostgreSQL (Supabase) — topics/contents/products/revenue    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. 推奨技術スタック
+
+| レイヤ | 採用 | 理由 |
+|---|---|---|
+| Frontend / BFF | Next.js 14 (App Router) + TypeScript + Tailwind CSS | Vercel無料枠でホスティング可、API RouteとUIを1リポジトリで管理でき初期コスト最小 |
+| DB (開発) | SQLite (Prisma) | 依存ゼロでローカル/CI動作、口座不要 |
+| DB (本番) | PostgreSQL (Supabase) | 無料枠500MB、Auth/Storageも同一プラットフォームで拡張しやすい |
+| ORM | Prisma | スキーマ駆動、マイグレーション管理が容易 |
+| 自動化/バッチ | Next.js Route Handler + Vercel Cron（Phase1-2）→ n8n（Phase5以降、複雑な条件分岐・SNS API連携が増えたら） | 初期は依存を増やさない。複雑化したらn8nへ移行 |
+| AI（推論・企画・スコアリング） | Claude API (Anthropic) | 長文構成・多段階判断・ツール利用に強く、本プロジェクトのAI CEO/企画AI/品質AIの中核 |
+| AI（低コスト大量処理） | Claude Haiku 4.5 / 必要に応じ他社軽量モデル | Xの大量短文生成、ラベル分類など |
+| 画像生成 | 用途に応じて選定（§3参照）。Phase3で確定 | 著作権・商用利用条件を要確認 |
+| 動画生成/字幕/TTS | 用途に応じて選定（§3参照）。Phase3で確定 | 品質とコストのトレードオフが大きい領域 |
+| Storage | Supabase Storage（生成物・サムネイル等） | DBと同一プラットフォームで完結 |
+| 認証（ダッシュボード） | 簡易Basic認証 → Supabase Auth（Phase2以降） | Phase1は運用者1人想定のため簡易実装 |
+| Discord Bot | discord.js | Phase8で導入 |
+| コスト/ログ | 自前の `ai_usage_logs` テーブル + Vercel/Supabase標準ログ | 外部APM導入は収益が出てから検討 |
+
+---
+
+## 3. 必要なAPI（用途別）
+
+| カテゴリ | API/サービス | 用途 | 備考 |
+|---|---|---|---|
+| AI推論 | Anthropic Claude API | 市場調査要約・スコアリング・企画・台本・品質チェック | 本プロジェクトの中核AI |
+| AI推論（補助） | OpenAI API / Google Gemini API | AI Routerでのコスト比較・画像生成(gpt-image等)・埋め込み | Phase1では未接続、Router設計のみ用意 |
+| トレンド | Google Trends（非公式） | 検索需要調査 | 公式APIなし。SerpApi等の有料代替も比較対象 |
+| 動画 | YouTube Data API v3 / YouTube Analytics API | トレンド取得・投稿・実績取得 | 無料枠あり（1日1万ユニット） |
+| SNS | X API v2 | 投稿・分析 | Freeプランは投稿数が非常に限定的。本格運用はBasic以上が必要（有料） |
+| SNS | Instagram Graph API (Meta) | 投稿・分析 | ビジネスアカウント必須、審査あり |
+| SNS | TikTok Content Posting API | 投稿 | アプリ審査必須 |
+| SNS | note | 公式APIなし | 手動運用 or 非公式手段はリスクが高いため要検討 |
+| アフィリエイト | Amazon PA-API (アソシエイト) | 商品検索・リンク生成 | 一定の成約実績がないと利用継続不可 |
+| アフィリエイト | 楽天ウェブサービス（楽天アフィリエイトAPI） | 商品検索・リンク生成 | 無料、要アカウント |
+| アフィリエイト | 各ASP（A8.net等） | 案件検索 | API提供は限定的、多くは管理画面ベース |
+| 画像生成 | 用途により選定 | サムネイル・SNS画像 | Phase3で比較検討して確定 |
+| 音声(TTS) | 用途により選定 | ナレーション | Phase3で比較検討して確定 |
+| 動画生成 | 用途により選定 | Shorts自動生成等 | 高コストのため導入は収益化後に再検討 |
+| Storage | Supabase Storage | 生成物保存 | 無料枠1GB |
+| 操作パネル | Discord Bot API | コマンド操作・通知 | 無料 |
+
+> 画像・動画・音声生成AIは技術進化と価格変動が激しい領域のため、DESIGN.mdでは「AI Router越しに差し替え可能なインターフェース」として設計し、Phase3着手時に実際のAPIを比較検討して確定する。
+
+---
+
+## 4. 必要なアカウント
+
+- Anthropic（Claude API キー）
+- Vercel（ホスティング）
+- Supabase（DB / Storage / Auth）
+- Google Cloud（YouTube Data API / YouTube Analytics API 用OAuthクライアント）
+- X Developer Portal
+- Meta for Developers（Instagram Graph API、ビジネスアカウント連携）
+- TikTok for Developers
+- Amazonアソシエイト・プログラム
+- 楽天アフィリエイト（楽天ウェブサービスAPIキー）
+- 各ASP（A8.net等）
+- Discord Developer Portal（Bot Token）
+- （任意）OpenAI / Google AI Studio（AI Router比較用）
+- （任意）画像・音声・動画生成APIの各アカウント（Phase3で選定後）
+
+---
+
+## 5. 各APIの料金（2026年8月時点の目安）
+
+| API | 料金 |
+|---|---|
+| Claude Sonnet 5 | Input $3 / 1M tokens、Output $15 / 1M tokens（2026-08-31まで導入価格 $2 / $10） |
+| Claude Opus 5 | Input $5 / 1M tokens、Output $25 / 1M tokens |
+| Claude Haiku 4.5 | Input $1 / 1M tokens、Output $5 / 1M tokens |
+| YouTube Data API v3 | 無料（1日1万クォータユニット、超過分は要申請） |
+| X API | Free: 投稿数が月1500件程度に制限。実運用にはBasic（月額$200〜）以上が事実上必要 |
+| Instagram Graph API | 無料（Meta審査あり） |
+| TikTok Content Posting API | 無料（審査あり） |
+| Amazon PA-API | 無料（ただし一定期間の売上実績維持が必要） |
+| 楽天ウェブサービスAPI | 無料 |
+| Vercel | Hobby無料 / Pro $20〜（商用利用・チーム利用時） |
+| Supabase | Free（500MB DB, 1GB Storage）/ Pro $25〜 |
+| Discord Bot | 無料 |
+| 画像/音声/動画生成 | サービス次第（従量課金が中心）。Phase3で選定時に確定し本表を更新する |
+
+> 料金は変動するため、実装時・課金発生前に必ず公式最新情報を確認すること。特にX APIは価格改定が頻繁。
+
+---
+
+## 6. 無料で使えるもの（Phase1〜2で採用）
+
+- Next.js / Vercel Hobby
+- Supabase Free（または開発時はSQLite）
+- Prisma
+- YouTube Data API（無料枠内）
+- 楽天ウェブサービスAPI
+- Discord Bot
+- Claude API（従量課金だが小規模利用なら月数ドル〜）
+
+## 7. 月額費用の概算
+
+| 段階 | 内容 | 概算月額 |
+|---|---|---|
+| Phase1（司令塔のみ、日次リサーチ数件+スコアリング） | Claude API少量利用 + Vercel/Supabase無料枠 | 約 $5〜20 |
+| Phase2〜4（企画・メディア生成追加） | Claude API利用増 + 画像/音声API従量課金 | 約 $50〜200 |
+| Phase5〜7（投稿自動化・分析・自己改善が稼働） | 上記 + X API Basic等SNS有料プラン + Vercel/Supabase Pro | 約 $300〜800 |
+| Phase8〜9（Discord運用・完全自動化） | 上記 + 動画生成等高コストAPIを本格投入した場合 | 事業規模に応じて変動、収益とのROIで判断（§14, §15） |
+
+---
+
+## 8. ディレクトリ構成（`revenue-factory/`）
+
+```
+revenue-factory/
+  DESIGN.md                 このファイル
+  README.md                 セットアップ手順
+  package.json
+  tsconfig.json
+  prisma/
+    schema.prisma           §9 データベース設計
+    seed.ts                 開発用シードデータ
+  src/
+    app/
+      layout.tsx
+      page.tsx               ダッシュボードトップ (§17相当)
+      globals.css
+      api/
+        research/run/route.ts     市場調査AI実行 → topics保存
+        topics/route.ts           topics一覧取得
+        topics/[id]/plan/route.ts コンテンツ企画AI実行 → contents保存
+    lib/
+      db.ts                  Prisma Client シングルトン
+      ai/
+        router.ts            AI選択ルーター（§11.4）
+        providers/
+          claude.ts          Anthropic SDK ラッパー
+          types.ts
+        costTracker.ts       ai_usage_logs 記録
+      research/
+        types.ts             SignalSource インターフェース
+        sources/
+          googleTrends.ts
+          youtube.ts
+          amazon.ts
+          rakuten.ts
+        aggregator.ts        複数ソースの信号を集約
+      scoring/
+        engine.ts            収益性スコアリングエンジン（§10.3相当）
+      planning/
+        contentPlanner.ts    コンテンツ企画AI（§10.5相当）
+    components/
+      TopicTable.tsx
+      StatCard.tsx
+  .env.example
+```
+
+新しいSNS/AIプロバイダを追加する際は `lib/research/sources/*` または `lib/ai/providers/*` に1ファイル追加するだけで済むようにインターフェースを共通化している（拡張可能設計）。
+
+---
+
+## 9. データベース設計
+
+Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照）。ユーザー要求の `topics / contents / products / revenue / analytics` を基本としつつ、AIコスト管理用に `ai_usage_logs` を追加。
+
+- **Topic**: 発見したテーマと収益性スコア
+- **Content**: Topicから派生する媒体別コンテンツ（企画〜投稿まで）
+- **Product**: アフィリエイト商品・自社商品候補
+- **Revenue**: 収益実績（媒体・コンテンツ単位）
+- **Analytics**: コンテンツごとの分析指標
+- **AiUsageLog**: AI/API呼び出しのコスト記録（§14で使用）
+
+詳細カラムは `prisma/schema.prisma` を正とする。
+
+---
+
+## 10. AIエージェント構成（Phase1実装範囲）
+
+| エージェント | Phase1での実装状況 | 役割 |
+|---|---|---|
+| AI CEO | 未実装（Phase7以降、自己改善ループと合わせて実装） | 全体戦略・優先順位決定 |
+| 市場調査AI | **実装** (`lib/research/aggregator.ts` + Claude) | 複数ソースの信号を集約し「今作る価値があるテーマ」を抽出 |
+| 収益性スコアリングAI | **実装** (`lib/scoring/engine.ts`) | 検索需要・SNS需要・競合度等を統合し総合収益期待値を算出 |
+| コンテンツ企画AI | **実装** (`lib/planning/contentPlanner.ts`) | Topicから媒体別企画を生成 |
+| YouTube/Instagram/TikTok/X/note/SEOブログ/アフィリエイト/商品開発/アプリ開発AI | Phase2〜6で順次実装 | 各媒体特化のコンテンツ生成・最適化 |
+| 品質チェックAI | Phase6で実装 | 投稿前チェック（§20相当） |
+
+各エージェントは「Claude APIへの特定用途プロンプト + 入出力スキーマ」として実装し、将来的にAI Routerが呼び出し先モデルを切り替えられるようにする。
+
+---
+
+## 11. API連携構成
+
+### 11.1 認証・秘匿情報管理
+
+すべてのAPIキーは `.env`（ローカル）/ Vercel Environment Variables（本番）で管理し、コードに直書きしない。`.env.example` に必要な変数名一覧を用意する。
+
+### 11.2 データ収集層（Signal Sources）
+
+```ts
+interface SignalSource {
+  name: string;
+  isConfigured(): boolean;      // APIキー未設定なら false
+  fetchSignals(seed?: string): Promise<Signal[]>; // 未設定時は空配列 + ログ警告
+}
+```
+
+Phase1では `googleTrends`（キー不要の代替手段を優先）と `youtube`（APIキー設定時のみ有効）を実装。楽天・Amazonは Phase4（アフィリエイトAI）で本格実装。
+
+### 11.3 コンテンツ生成層
+
+Claude APIをコアに、画像・音声・動画は Phase3 で個別コネクタを追加。
+
+### 11.4 AI選択ルーター（AI Router）
+
+```ts
+type TaskKind = "research_summarize" | "scoring" | "planning" | "long_form_script"
+  | "short_copy" | "image" | "video" | "tts";
+
+function routeTask(kind: TaskKind): { provider: string; model: string } {
+  // Phase1: すべてClaudeに固定しつつ、タスク種別ごとにモデルを切替える
+  // - research_summarize / scoring / planning / long_form_script → claude-sonnet-5
+  // - short_copy（大量の短文） → claude-haiku-4-5
+  // Phase3以降、画像/音声/動画やOpenAI/Geminiとのコスト比較ロジックを追加
+}
+```
+
+### 11.5 投稿・収益連携層（Publishers）
+
+```ts
+interface Publisher {
+  platform: string;
+  isConfigured(): boolean;
+  publish(content: ContentDraft): Promise<PublishResult>;
+}
+```
+
+Phase5で実装。§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO）をPublisher呼び出しの前段でチェックする。
+
+---
+
+## 12. セキュリティ設計
+
+- APIキーは環境変数のみで管理し、リポジトリにコミットしない（`.gitignore` に `.env*` を含める）
+- ダッシュボードは最低限Basic認証必須（Phase1）、Phase2でSupabase Authに移行しロール管理（管理者/閲覧者）を導入
+- 外部公開APIエンドポイント（投稿トリガー等）はAPIキー or 署名検証を必須にする
+- SNS投稿・アフィリエイトリンクの生成は必ず各サービスの規約・表示義務（広告表記・アフィリエイト表記）を満たすようテンプレート側で強制する
+- 生成コンテンツはPhase6の品質チェックAIを通過するまで自動投稿しない（§13, §20）
+- ログにAPIキーやトークンを出力しない
+- Discord Bot・Webhookは署名検証・IP/レート制限を実装（Phase8）
+
+---
+
+## 13. 投稿自動化設計
+
+3段階の自動化レベルをContentステータスとして管理する。
+
+| モード | フロー | 実装Phase |
+|---|---|---|
+| SAFE MODE | AI生成 → 人間確認 → 投稿 | Phase5（デフォルト） |
+| SEMI AUTO | AI生成 → AI品質チェック → 人間最終確認 → 自動投稿 | Phase6〜7 |
+| FULL AUTO | AI生成 → AI品質チェック → 自動投稿 | Phase9（規約・リスクを十分検証した媒体のみ） |
+
+`Content.status` は `draft → review → approved → scheduled → published → failed` の状態遷移で管理し、各媒体のPublisherがAPI制限・規約に抵触する処理を検知した場合は自動投稿を行わず `review` に差し戻す。
+
+---
+
+## 14. 収益分析設計
+
+- 媒体別に取得可能な指標を `Analytics`（コンテンツ単位）と `Revenue`（収益単位）に正規化して格納
+- `AiUsageLog` で「コンテンツ制作あたりのAIコスト」を積み上げ、`Revenue - AiCost - その他コスト` で利益を算出（§26相当のROI最適化はPhase7で実装）
+- 日次バッチ（Vercel Cron、Phase2以降）で各媒体APIから指標を取得し、DBへ反映
+- ダッシュボードで「収益 < コスト」のテーマ・コンテンツを自動的にハイライトし、停止候補として提示（Phase7）
+
+---
+
+## 15. Discord連携設計（Phase8）
+
+discord.jsでBotを実装し、以下のスラッシュコマンドを提供する。
+
+`/start` `/status` `/report` `/trends` `/create [genre]` `/approve` `/schedule` `/top` `/stop` `/pause`
+
+Botは既存のREST API（`/api/*`）を呼び出すクライアントとして実装し、ダッシュボードと同じビジネスロジックを再利用する（ロジックの二重実装を避ける）。
+
+---
+
+## 16. Phase 1〜9 開発計画
+
+| Phase | 内容 | 本実装での状況 |
+|---|---|---|
+| 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **本コミットで実装** |
+| 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・X・note・ブログ） | 未着手 |
+| 3 | 画像・動画・音声生成API選定・連携 | 未着手 |
+| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | 未着手 |
+| 5 | 投稿API連携（SAFE MODE中心） | 未着手 |
+| 6 | 収益分析・AI品質チェック | 未着手 |
+| 7 | AI自己改善ループ・ROI最適化・AI CEO | 未着手 |
+| 8 | Discord操作 | 未着手 |
+| 9 | 完全自動化（FULL AUTO、規約検証済み媒体のみ） | 未着手 |
+
+各Phaseの着手前に、対象範囲のAPI規約・料金・技術選定を再調査した上で本DESIGN.mdを更新すること。
