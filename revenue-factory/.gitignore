@@ -9,3 +9,5 @@ dev.db-journal
 .env.local
 .DS_Store
 *.tsbuildinfo
+public/generated/*
+!public/generated/.gitkeep

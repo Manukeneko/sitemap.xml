@@ -1,6 +1,6 @@
 # AI収益工場 全体設計書
 
-version: 0.3 (Phase 4〜7 実装時点)
+version: 0.4 (Phase 1・2・3・4・5・6・7・8 実装時点。Phase9は意図的に未実装)
 最終更新: 2026-08-08
 
 > 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
@@ -234,6 +234,13 @@ revenue-factory/
         registry.ts             platform → Publisher 解決
       roi/                     ROI最適化（Phase7）
         engine.ts               テーマ別 AIコスト対収益 算出
+      media/                   画像・音声生成（Phase3）
+        types.ts                ImageProvider / TtsProvider インターフェース
+        providers/openaiImage.ts  OpenAI Images API(gpt-image-1)
+        providers/openaiTts.ts    OpenAI TTS API(tts-1)
+        storage.ts               生成物をpublic/generated/へ保存（本番はStorage差し替え）
+        costLogger.ts            画像/音声コストの概算記録
+        generateForContent.ts    Contentからプロンプト/ナレーション文を抽出して生成
       generators/            媒体別AI（Phase2）。1ファイル追加で新媒体を拡張できる
         types.ts             ContentGeneratorSpec 共通インターフェース
         runner.ts            Claude呼び出し+コスト記録の共通処理
@@ -244,6 +251,8 @@ revenue-factory/
       StatCard.tsx
       RoiPanel.tsx
   .env.example
+  discord-bot/                Phase8。別package.jsonの常駐プロセス（§15参照）
+    src/{index.ts,commands.ts,api.ts,registerCommands.ts}
 ```
 
 新しいSNS/AIプロバイダを追加する際は `lib/research/sources/*` または `lib/ai/providers/*` に1ファイル追加するだけで済むようにインターフェースを共通化している（拡張可能設計）。
@@ -379,13 +388,13 @@ interface Publisher {
 
 ---
 
-## 15. Discord連携設計（Phase8）
+## 15. Discord連携設計（Phase8・実装済み）
 
-discord.jsでBotを実装し、以下のスラッシュコマンドを提供する。
+`discord-bot/`（Next.jsアプリとは別package.jsonの常駐Node.jsプロセス）にdiscord.jsでBotを実装し、以下のスラッシュコマンドを提供する。
 
-`/start` `/status` `/report` `/trends` `/create [genre]` `/approve` `/schedule` `/top` `/stop` `/pause`
+`/start` `/status` `/report` `/trends` `/create [genre]` `/approve [content_id]` `/schedule` `/top` `/stop` `/pause`
 
-Botは既存のREST API（`/api/*`）を呼び出すクライアントとして実装し、ダッシュボードと同じビジネスロジックを再利用する（ロジックの二重実装を避ける）。
+Botは既存のREST API（`/api/*`）を呼び出すクライアントとして実装し、ダッシュボードと同じビジネスロジックを再利用している（ロジックの二重実装を避ける）。Discord Gatewayへの常時接続が必要なため、Vercel等のサーバーレス環境ではなく常駐可能な環境（VPS等）で動かす。`/stop` `/pause` は、常時稼働する自動処理（スケジューラ）自体がPhase9まで実装されないため、現時点では「対象がない」旨を返す誠実な実装にしている（本物のON/OFFにはPhase9のスケジューラ実装が必要）。
 
 ---
 
@@ -395,12 +404,12 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 |---|---|---|
 | 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
 | 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
-| 3 | 画像・動画・音声生成API選定・連携 | 未着手（§3参照。実際のAPI選定・課金発生を伴うため、必要になったタイミングで着手） |
+| 3 | 画像・動画・音声生成API選定・連携 | **一部実装**（OpenAI Images API[gpt-image-1]でサムネイル画像、OpenAI TTS API[tts-1]でナレーション音声を生成。`OPENAI_API_KEY`未設定時は自動スキップ。生成物はローカル`public/generated/`に保存する初期実装で、本番はStorage差し替えが必要。動画生成は高コストのため引き続き未着手） |
 | 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI + アフィリエイトAIによる商品選定・スコアリングを実装。Amazon PA-APIは署名実装が必要かつ実績要件があるため未実装のスタブ。ASP連携は未着手） |
 | 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移とコピペ投稿用テキスト出力[Publisher: manualExport]までを実装。YouTube/Instagram/TikTok/X等の公式投稿APIによる自動投稿は各媒体のアプリ審査完了後に追加） |
 | 6 | 収益分析・AI品質チェック | **一部実装**（品質チェックAIを実装し、承認には品質チェック合格が必須。収益・視聴回数等を各媒体APIから自動取得する分析機能は未着手で、Phase7の手動収益登録で代替） |
 | 7 | AI自己改善ループ・ROI最適化・AI CEO | **一部実装**（テーマ別のAIコスト対収益[ROI]算出・赤字テーマの停止操作を実装。過去の成功パターンを翌日の企画に自動反映する自己改善ループ、AI CEOによる全体戦略立案は未着手） |
-| 8 | Discord操作 | 未着手 |
-| 9 | 完全自動化（FULL AUTO、規約検証済み媒体のみ） | 未着手（Phase5で各媒体の公式投稿APIが揃うまでは意図的に実装しない） |
+| 8 | Discord操作 | **実装済み**（`discord-bot/`。`/start /status /report /trends /create /approve /schedule /top /stop /pause` を実装し、既存REST APIを呼び出すクライアントとして動作。`/stop`/`/pause`は常時稼働の自動処理自体が未実装のため参考情報を返す） |
+| 9 | 完全自動化（FULL AUTO、規約検証済み媒体のみ） | 意図的に未実装（Phase5で各媒体の公式投稿APIが揃い、規約・リスクを十分検証できるまでは実装しない） |
 
 各Phaseの着手前に、対象範囲のAPI規約・料金・技術選定を再調査した上で本DESIGN.mdを更新すること。

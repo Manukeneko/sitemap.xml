@@ -8,7 +8,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const topic = await db.topic.findUnique({
     where: { id: params.id },
     include: {
-      contents: { orderBy: { createdAt: "asc" } },
+      contents: {
+        orderBy: { createdAt: "asc" },
+        include: { mediaAssets: { orderBy: { createdAt: "desc" } } },
+      },
       products: { orderBy: { score: "desc" } },
     },
   });

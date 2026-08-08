@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Topic, Content, Product } from "@prisma/client";
+import type { Topic, Content, Product, MediaAsset } from "@prisma/client";
+
+type ContentWithMedia = Content & { mediaAssets?: MediaAsset[] };
 
 const SCORE_FIELDS: Array<{ key: keyof Topic; label: string }> = [
   { key: "searchDemand", label: "検索需要" },
@@ -47,7 +49,7 @@ function renderBody(body: string, status: string): string {
 }
 
 interface TopicDetail {
-  contents: Content[];
+  contents: ContentWithMedia[];
   products: Product[];
 }
 
@@ -60,15 +62,47 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
   const [busyContentId, setBusyContentId] = useState<string | null>(null);
   const [exportText, setExportText] = useState<Record<string, string>>({});
   const [revenueInput, setRevenueInput] = useState<Record<string, string>>({});
+  const [mediaBusyContentId, setMediaBusyContentId] = useState<string | null>(null);
 
-  function replaceContent(topicId: string, updated: Content) {
+  // ステータス更新系のAPIはmediaAssetsを含まないContentしか返さないため、
+  // 既存のmediaAssetsをマージして表示が消えないようにする
+  function replaceContent(topicId: string, updated: ContentWithMedia) {
     setDetailByTopic((prev) => ({
       ...prev,
       [topicId]: {
         ...prev[topicId],
-        contents: (prev[topicId]?.contents ?? []).map((c) => (c.id === updated.id ? updated : c)),
+        contents: (prev[topicId]?.contents ?? []).map((c) =>
+          c.id === updated.id ? { ...updated, mediaAssets: updated.mediaAssets ?? c.mediaAssets } : c
+        ),
       },
     }));
+  }
+
+  function addMediaAsset(topicId: string, contentId: string, asset: MediaAsset) {
+    setDetailByTopic((prev) => ({
+      ...prev,
+      [topicId]: {
+        ...prev[topicId],
+        contents: (prev[topicId]?.contents ?? []).map((c) =>
+          c.id === contentId ? { ...c, mediaAssets: [asset, ...(c.mediaAssets ?? [])] } : c
+        ),
+      },
+    }));
+  }
+
+  async function generateMedia(topicId: string, contentId: string, kind: "image" | "audio") {
+    setMediaBusyContentId(contentId);
+    try {
+      const res = await fetch(`/api/contents/${contentId}/media/${kind}`, { method: "POST" });
+      const json = await res.json();
+      if (res.ok) {
+        addMediaAsset(topicId, contentId, json.asset);
+      } else {
+        alert(json.error ?? "メディア生成に失敗しました");
+      }
+    } finally {
+      setMediaBusyContentId(null);
+    }
   }
 
   async function loadDetail(topicId: string) {
@@ -370,6 +404,44 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                         {exportText[c.id] && (
                           <div className="outline" style={{ marginTop: 8 }}>
                             {exportText[c.id]}
+                          </div>
+                        )}
+
+                        {c.status !== "draft" && (
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <button
+                                className="secondary"
+                                disabled={mediaBusyContentId === c.id}
+                                onClick={() => generateMedia(topic.id, c.id, "image")}
+                              >
+                                {mediaBusyContentId === c.id ? "生成中..." : "サムネイル画像を生成（要OPENAI_API_KEY）"}
+                              </button>
+                              <button
+                                className="secondary"
+                                disabled={mediaBusyContentId === c.id}
+                                onClick={() => generateMedia(topic.id, c.id, "audio")}
+                              >
+                                {mediaBusyContentId === c.id ? "生成中..." : "ナレーション音声を生成（要OPENAI_API_KEY）"}
+                              </button>
+                            </div>
+                            {c.mediaAssets && c.mediaAssets.length > 0 && (
+                              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                                {c.mediaAssets.map((asset) =>
+                                  asset.kind === "image" ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      key={asset.id}
+                                      src={asset.filePath}
+                                      alt="生成されたサムネイル"
+                                      style={{ maxWidth: 240, borderRadius: 8 }}
+                                    />
+                                  ) : (
+                                    <audio key={asset.id} controls src={asset.filePath} />
+                                  )
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

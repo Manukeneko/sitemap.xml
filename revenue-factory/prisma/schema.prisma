@@ -57,6 +57,7 @@ model Content {
 
   revenues  Revenue[]
   analytics Analytics?
+  mediaAssets MediaAsset[]
 
   @@index([topicId])
   @@index([status])
@@ -124,4 +125,22 @@ model AiUsageLog {
 
   @@index([createdAt])
   @@index([relatedTopicId])
+}
+
+// 画像・音声生成物（Phase3、DESIGN.md §3, §11.3）。ローカルファイルシステム(public/generated/)に
+// 保存する初期実装で、本番ではStorageAdapterをSupabase Storage等に差し替える想定。
+model MediaAsset {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  kind      String // image | audio
+  provider  String // openai ...
+  model     String
+  prompt    String?
+  filePath  String // public/ からの相対パス。ブラウザからは /generated/... で参照する
+  mimeType  String
+  costUsd   Float    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([contentId])
 }

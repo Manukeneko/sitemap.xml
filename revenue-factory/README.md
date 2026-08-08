@@ -1,4 +1,4 @@
-# AI収益工場 — Phase 1・2・4〜7 実装済み
+# AI収益工場 — Phase 1・2・3・4・5・6・7・8 実装済み（Phase9は意図的に未実装）
 
 「何を作れば最も収益につながるかをAIが判断し、改善し続けるシステム」の実装です。
 全体設計は [`DESIGN.md`](./DESIGN.md) を参照してください（Phase進捗は §16 に一覧があります）。
@@ -37,6 +37,14 @@
 - 収益実績の手動登録（`POST /api/revenue`）と、テーマ別のAIコスト対収益（ROI）算出
 - 赤字テーマをダッシュボードから停止（`Topic.status: archived`）できる
 
+**Phase 3: 画像・音声生成**
+- OpenAI Images API（gpt-image-1）でサムネイル画像、OpenAI TTS API（tts-1）でナレーション音声を生成
+- `OPENAI_API_KEY` 未設定時は自動スキップ。生成物は `public/generated/` にローカル保存（本番はStorage差し替えが必要）
+
+**Phase 8: Discord操作パネル**
+- `discord-bot/`（別プロセス）に `/start /status /report /trends /create /approve /schedule /top /stop /pause` を実装
+- 詳細は [`discord-bot/README.md`](./discord-bot/README.md) を参照
+
 ## セットアップ
 
 ```bash
@@ -62,6 +70,7 @@ http://localhost:3000 でダッシュボードが開きます。
 | `SERPAPI_KEY` | 任意 | 設定するとGoogleトレンド関連クエリを市場調査AIの参考シグナルとして利用します（[SerpApi](https://serpapi.com/)） |
 | `RAKUTEN_APP_ID` | 任意 | 設定するとアフィリエイトAIが楽天市場の実在商品を検索・選定できます（[楽天ウェブサービス](https://webservice.rakuten.co.jp/)） |
 | `USD_JPY_RATE` | 任意 | ROI算出時のドル円換算レート概算（デフォルト150） |
+| `OPENAI_API_KEY` | 任意 | 設定するとサムネイル画像生成・ナレーション音声生成が使えます |
 
 未設定のAPIは自動的にスキップされ、市場調査AIはClaudeの知識ベースのみで提案を行います（DESIGN.md §11.2）。
 
@@ -78,12 +87,14 @@ http://localhost:3000 でダッシュボードが開きます。
 2. テーマをクリックして展開し、「コンテンツ企画を生成」を実行
    → 1テーマから YouTube/Instagram/TikTok/X/note/ブログ/PDF/電子書籍/テンプレート/アプリ化アイデア の企画案を一括生成します（`status: draft`）
 3. 生成された企画（YouTube/Instagram/TikTok/X/note/ブログ）ごとに「詳細生成（台本/原稿）」を実行
-   → 媒体別AIが台本・キャプション・見出し構成などを詳細生成します（`status: review`）。PDF/電子書籍/テンプレート/アプリ化アイデアの生成AIはPhase3以降で実装予定です
-4. 「品質チェックを実行」を実行し、`qualityStatus: passed` になったら「承認する」を実行（`status: approved`）。高リスクな指摘があれば `status: flagged` となり、内容を修正して再チェックが必要です
-5. 「投稿予定にする」（`status: scheduled`）→ 実際に各SNS/ブログへ手動で投稿 →「投稿完了にする」（`status: published`）の順に進めます。「コピペ用テキストを表示」で投稿画面に貼り付けられるテキストを取得できます
-6. 投稿後、実際の収益が発生したら `published` なコンテンツの欄から金額を入力して「収益を記録」を実行してください
-7. テーマ展開時に「アフィリエイト商品候補を探す」を実行すると、楽天の実在商品からAIが紹介候補を選定します
-8. ページ下部の「ROI（AIコスト対収益）」パネルで、テーマ別のAIコスト対収益を確認できます。赤字テーマは「このテーマを停止する」で止められます
+   → 媒体別AIが台本・キャプション・見出し構成などを詳細生成します（`status: review`）。PDF/電子書籍/テンプレート/アプリ化アイデアの生成AIは今後のPhaseで実装予定です
+4. `OPENAI_API_KEY` を設定している場合、詳細生成後に「サムネイル画像を生成」「ナレーション音声を生成」も実行できます
+5. 「品質チェックを実行」を実行し、`qualityStatus: passed` になったら「承認する」を実行（`status: approved`）。高リスクな指摘があれば `status: flagged` となり、内容を修正して再チェックが必要です
+6. 「投稿予定にする」（`status: scheduled`）→ 実際に各SNS/ブログへ手動で投稿 →「投稿完了にする」（`status: published`）の順に進めます。「コピペ用テキストを表示」で投稿画面に貼り付けられるテキストを取得できます
+7. 投稿後、実際の収益が発生したら `published` なコンテンツの欄から金額を入力して「収益を記録」を実行してください
+8. テーマ展開時に「アフィリエイト商品候補を探す」を実行すると、楽天の実在商品からAIが紹介候補を選定します
+9. ページ下部の「ROI（AIコスト対収益）」パネルで、テーマ別のAIコスト対収益を確認できます。赤字テーマは「このテーマを停止する」で止められます
+10. Discordから操作したい場合は `discord-bot/` を別途起動してください（[discord-bot/README.md](./discord-bot/README.md)）
 
 ## ディレクトリ構成
 
@@ -91,4 +102,4 @@ http://localhost:3000 でダッシュボードが開きます。
 
 ## Next Phase
 
-Phase 3（画像/動画/音声生成API選定）、Phase8（Discord操作）、Phase9（完全自動化）は未着手です。計画は `DESIGN.md` §16 を参照してください。
+Phase 9（完全自動化）は、各媒体の公式投稿APIとの連携（現状は手動投稿用のテキスト出力のみ）が揃うまで意図的に未実装です。画像生成の動画版（Shorts等の自動編集）や、各媒体の分析APIによる自動データ取得（現状は収益の手動登録のみ）も今後の課題です。計画は `DESIGN.md` §16 を参照してください。
