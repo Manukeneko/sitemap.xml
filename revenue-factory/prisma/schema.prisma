@@ -47,7 +47,9 @@ model Content {
   contentType  String // 企画種別（例: script, caption, article）
   title        String
   body         String // 台本・原稿・構成のJSON or Markdown
-  status       String    @default("draft") // draft | review | approved | scheduled | published | failed
+  status       String    @default("draft") // draft | review | flagged | approved | scheduled | published | failed
+  qualityStatus String   @default("unchecked") // unchecked | passed | flagged（DESIGN.md §20 品質チェックAI）
+  qualityNotes  String? // JSON: 品質チェックAIの指摘事項
   scheduledAt  DateTime?
   publishedAt  DateTime?
   createdAt    DateTime  @default(now())

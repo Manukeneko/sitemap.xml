@@ -1,6 +1,6 @@
 # AI収益工場 全体設計書
 
-version: 0.2 (Phase 2 実装時点)
+version: 0.3 (Phase 4〜7 実装時点)
 最終更新: 2026-08-08
 
 > 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
@@ -188,10 +188,19 @@ revenue-factory/
       api/
         research/run/route.ts     市場調査AI実行 → topics保存
         topics/route.ts           topics一覧取得
-        topics/[id]/route.ts      topics詳細 + contents取得
+        topics/[id]/route.ts      topics詳細 + contents + products取得
         topics/[id]/plan/route.ts コンテンツ企画AI実行 → contents保存
-        contents/[id]/generate/route.ts 媒体別AIで台本・原稿を詳細生成（draft→review）
-        contents/[id]/approve/route.ts  人間確認完了（review→approved）
+        topics/[id]/affiliate/route.ts アフィリエイトAI実行 → products保存
+        topics/[id]/archive/route.ts   テーマを停止（ROI赤字時等）
+        contents/[id]/generate/route.ts       媒体別AIで台本・原稿を詳細生成（draft→review）
+        contents/[id]/quality-check/route.ts  品質チェックAI実行（review/flagged→review or flagged）
+        contents/[id]/approve/route.ts        人間確認完了（review[qualityStatus=passed]→approved）
+        contents/[id]/schedule/route.ts       投稿予定にする（approved→scheduled）
+        contents/[id]/mark-published/route.ts 投稿完了を記録（scheduled/approved→published）
+        contents/[id]/export/route.ts         コピペ投稿用テキストを取得（状態は変更しない）
+        revenue/route.ts          収益実績の手動登録・一覧
+        roi/route.ts              テーマ別ROI（AIコスト対収益）
+        stats/route.ts            ダッシュボード「今日」集計
     lib/
       db.ts                  Prisma Client シングルトン
       ai/
@@ -203,15 +212,28 @@ revenue-factory/
       research/
         types.ts             SignalSource インターフェース
         sources/
-          googleTrends.ts
-          youtube.ts
-          amazon.ts
-          rakuten.ts
+          googleTrends.ts    SerpApi経由（任意設定）
+          youtube.ts         YouTube Data API v3（任意設定）
         aggregator.ts        複数ソースの信号を集約
       scoring/
         engine.ts            収益性スコアリングエンジン（§10.3相当）
       planning/
         contentPlanner.ts    コンテンツ企画AI（§10.5相当）
+      affiliate/             アフィリエイトAI（Phase4）
+        types.ts             AffiliateSource インターフェース
+        sources/
+          rakuten.ts         楽天ウェブサービスAPI（実装済み）
+          amazon.ts          PA-API未実装のスタブ（isConfigured()常にfalse）
+        selector.ts          実在商品候補からのAI選定・スコアリング
+      quality/                品質チェックAI（Phase6）
+        checker.ts
+      publishing/              投稿ワークフロー（Phase5）
+        types.ts               Publisher インターフェース
+        formatForExport.ts     コピペ用テキスト整形
+        publishers/manualExport.ts フォールバックPublisher（外部API非呼び出し）
+        registry.ts             platform → Publisher 解決
+      roi/                     ROI最適化（Phase7）
+        engine.ts               テーマ別 AIコスト対収益 算出
       generators/            媒体別AI（Phase2）。1ファイル追加で新媒体を拡張できる
         types.ts             ContentGeneratorSpec 共通インターフェース
         runner.ts            Claude呼び出し+コスト記録の共通処理
@@ -220,6 +242,7 @@ revenue-factory/
     components/
       TopicTable.tsx
       StatCard.tsx
+      RoiPanel.tsx
   .env.example
 ```
 
@@ -256,8 +279,9 @@ Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照
 | X AI（通常投稿・スレッド） | **実装** (`lib/generators/x.ts`) | 価値提供→自然な誘導の投稿・スレッドを生成 |
 | note AI（無料・有料記事） | **実装** (`lib/generators/note.ts`) | 無料→有料への導線を意識した記事を生成 |
 | SEOブログAI | **実装** (`lib/generators/blog.ts`) | 見出し・FAQ・メタディスクリプション込みの記事を生成 |
-| アフィリエイトAI/商品開発AI/アプリ開発AI | Phase4・Phase6で実装 | 商品選定・自社商品企画・アプリ化判断 |
-| 品質チェックAI | Phase6で実装 | 投稿前チェック（§20相当） |
+| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPIから実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon PA-APIは未実装のスタブ |
+| 商品開発AI/アプリ開発AI | Phase6・Phase9で実装 | 自社商品企画・アプリ化判断 |
+| 品質チェックAI | **実装**（`lib/quality/checker.ts`） | 投稿前チェック（§20相当）。severity:highの指摘があれば`status:"flagged"`とし、承認（approve）をブロックする |
 
 媒体別AIは `lib/generators/` に「共通インターフェース (`ContentGeneratorSpec`) + プラットフォームごとのプロンプト定義」として実装しており、`lib/generators/index.ts` のレジストリに1行追加するだけで新しい媒体を追加できる（拡張可能設計）。生成された台本・原稿は `Content.body` にJSON文字列として保存し、`Content.status` を `draft`（企画のみ）→`review`（詳細生成済み・要確認）→`approved`（承認済み。実際の自動投稿はPhase5のPublisherで実装）と遷移させる。これはSAFE MODE（§13）の「AI生成→人間確認→投稿」の最初の2段階に対応する。
 
@@ -311,7 +335,7 @@ interface Publisher {
 }
 ```
 
-Phase5で実装。§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO）をPublisher呼び出しの前段でチェックする。
+`lib/publishing/` に実装済み。現状は `manualExportPublisher`（コピペ用テキスト整形のみ、外部API呼び出しなし）が全platformのフォールバックとして動作する。各媒体の公式投稿APIをPublisherとして追加する際は、§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO）をPublisher呼び出しの前段でチェックすること。
 
 ---
 
@@ -337,16 +361,21 @@ Phase5で実装。§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO�
 | SEMI AUTO | AI生成 → AI品質チェック → 人間最終確認 → 自動投稿 | Phase6〜7 |
 | FULL AUTO | AI生成 → AI品質チェック → 自動投稿 | Phase9（規約・リスクを十分検証した媒体のみ） |
 
-`Content.status` は `draft → review → approved → scheduled → published → failed` の状態遷移で管理し、各媒体のPublisherがAPI制限・規約に抵触する処理を検知した場合は自動投稿を行わず `review` に差し戻す。
+`Content.status` は `draft → review → flagged → approved → scheduled → published → failed` の状態遷移で管理し、各媒体のPublisherがAPI制限・規約に抵触する処理を検知した場合は自動投稿を行わず `review`/`flagged` に差し戻す。
+
+**現在の実装状況（SAFE MODEの最初のステップとして実装済み）:**
+`draft`（企画のみ）→ 詳細生成AI実行 → `review`（台本/原稿生成済み）→ 品質チェックAI実行 → `review`（合格）or `flagged`（高リスク指摘あり、要修正）→ 人間が承認 → `approved` → `scheduled`（投稿予定にする）→ `published`（投稿完了を記録）。
+承認（approve）は品質チェックAIが `passed` を返していない限りブロックされる（§20）。
+実際の投稿は Publisher インターフェース（`lib/publishing/`）が担い、現状は `manualExportPublisher`（人間がそのままSNS/ブログの投稿画面に貼り付けられるテキストを整形して返すのみで、外部APIは呼び出さない）のみを実装している。YouTube Data API / Instagram Graph API 等、各媒体の公式投稿APIはアプリ審査完了後に platform 別 Publisher として追加し、SEMI AUTO・FULL AUTO はそれらが揃ってから解禁する。
 
 ---
 
 ## 14. 収益分析設計
 
 - 媒体別に取得可能な指標を `Analytics`（コンテンツ単位）と `Revenue`（収益単位）に正規化して格納
-- `AiUsageLog` で「コンテンツ制作あたりのAIコスト」を積み上げ、`Revenue - AiCost - その他コスト` で利益を算出（§26相当のROI最適化はPhase7で実装）
-- 日次バッチ（Vercel Cron、Phase2以降）で各媒体APIから指標を取得し、DBへ反映
-- ダッシュボードで「収益 < コスト」のテーマ・コンテンツを自動的にハイライトし、停止候補として提示（Phase7）
+- `AiUsageLog` で「コンテンツ制作あたりのAIコスト」を積み上げ、`Revenue - AiCost - その他コスト` で利益を算出（§26相当のROI最適化）
+- 日次バッチ（Vercel Cron、Phase2以降）で各媒体APIから指標を取得し、DBへ反映 — **現状は未実装**。各媒体の分析APIは審査・OAuth連携が必要なため、`POST /api/revenue` による手動登録で暫定運用する
+- ダッシュボードのROIパネル（`GET /api/roi`）で、テーマ単位の「AIコスト(USD→JPY換算) vs 収益(JPY)」を算出し、赤字テーマを停止（`Topic.status = "archived"`）できるようにしている（**実装済み**）。為替レートは `USD_JPY_RATE` 環境変数による概算（デフォルト150円）であり、リアルタイム為替APIは導入していない
 
 ---
 
@@ -366,12 +395,12 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 |---|---|---|
 | 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
 | 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
-| 3 | 画像・動画・音声生成API選定・連携 | 未着手 |
-| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | 未着手 |
-| 5 | 投稿API連携（SAFE MODE中心） | 未着手 |
-| 6 | 収益分析・AI品質チェック | 未着手 |
-| 7 | AI自己改善ループ・ROI最適化・AI CEO | 未着手 |
+| 3 | 画像・動画・音声生成API選定・連携 | 未着手（§3参照。実際のAPI選定・課金発生を伴うため、必要になったタイミングで着手） |
+| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI + アフィリエイトAIによる商品選定・スコアリングを実装。Amazon PA-APIは署名実装が必要かつ実績要件があるため未実装のスタブ。ASP連携は未着手） |
+| 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移とコピペ投稿用テキスト出力[Publisher: manualExport]までを実装。YouTube/Instagram/TikTok/X等の公式投稿APIによる自動投稿は各媒体のアプリ審査完了後に追加） |
+| 6 | 収益分析・AI品質チェック | **一部実装**（品質チェックAIを実装し、承認には品質チェック合格が必須。収益・視聴回数等を各媒体APIから自動取得する分析機能は未着手で、Phase7の手動収益登録で代替） |
+| 7 | AI自己改善ループ・ROI最適化・AI CEO | **一部実装**（テーマ別のAIコスト対収益[ROI]算出・赤字テーマの停止操作を実装。過去の成功パターンを翌日の企画に自動反映する自己改善ループ、AI CEOによる全体戦略立案は未着手） |
 | 8 | Discord操作 | 未着手 |
-| 9 | 完全自動化（FULL AUTO、規約検証済み媒体のみ） | 未着手 |
+| 9 | 完全自動化（FULL AUTO、規約検証済み媒体のみ） | 未着手（Phase5で各媒体の公式投稿APIが揃うまでは意図的に実装しない） |
 
 各Phaseの着手前に、対象範囲のAPI規約・料金・技術選定を再調査した上で本DESIGN.mdを更新すること。

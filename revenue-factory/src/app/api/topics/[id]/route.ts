@@ -3,11 +3,14 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/topics/:id — Topic詳細 + 生成済みContent一覧
+// GET /api/topics/:id — Topic詳細 + 生成済みContent一覧 + アフィリエイト商品候補
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const topic = await db.topic.findUnique({
     where: { id: params.id },
-    include: { contents: { orderBy: { createdAt: "asc" } } },
+    include: {
+      contents: { orderBy: { createdAt: "asc" } },
+      products: { orderBy: { score: "desc" } },
+    },
   });
   if (!topic) {
     return NextResponse.json({ error: "topic not found" }, { status: 404 });

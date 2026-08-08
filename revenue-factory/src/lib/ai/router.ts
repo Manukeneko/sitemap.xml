@@ -7,7 +7,9 @@ export type TaskKind =
   | "scoring"
   | "planning"
   | "long_form_script"
-  | "short_copy";
+  | "short_copy"
+  | "affiliate_selection"
+  | "quality_check";
 
 export interface RouteDecision {
   provider: "anthropic";
@@ -20,6 +22,8 @@ const TASK_MODEL_MAP: Record<TaskKind, string> = {
   planning: "claude-sonnet-5",
   long_form_script: "claude-sonnet-5",
   short_copy: "claude-haiku-4-5",
+  affiliate_selection: "claude-sonnet-5",
+  quality_check: "claude-sonnet-5",
 };
 
 export function routeTask(kind: TaskKind): RouteDecision {

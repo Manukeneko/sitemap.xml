@@ -1,7 +1,7 @@
-# AI収益工場 — Phase 1〜2: AI収益司令塔 + コンテンツ生成
+# AI収益工場 — Phase 1・2・4〜7 実装済み
 
-「何を作れば最も収益につながるかをAIが判断し、改善し続けるシステム」の Phase 1〜2 実装です。
-全体設計は [`DESIGN.md`](./DESIGN.md) を参照してください。
+「何を作れば最も収益につながるかをAIが判断し、改善し続けるシステム」の実装です。
+全体設計は [`DESIGN.md`](./DESIGN.md) を参照してください（Phase進捗は §16 に一覧があります）。
 
 実装済みの機能:
 
@@ -20,6 +20,22 @@
 - note AI: 無料記事 + 有料記事（有料への導線込み）
 - SEOブログAI: 見出し構成・FAQ・メタディスクリプション込みの記事
 - SAFE MODE（DESIGN.md §13）: 生成後は自動投稿せず `draft → review → approved` の状態で人間の確認を挟む
+
+**Phase 6: 品質チェックAI**
+- 誤情報・著作権・商標・広告表記漏れ・誇大表現・低品質/重複コンテンツ等をClaudeがチェック
+- `severity: high` の指摘があれば `status: flagged` にし、品質チェック合格（`qualityStatus: passed`）まで承認をブロック
+
+**Phase 4: アフィリエイトAI**
+- 楽天ウェブサービスAPIから実在の商品を検索し、テーマとの関連性・収益期待値でAIが選定・スコアリング
+- Amazon PA-APIは署名実装と実績要件があるため未実装（インターフェースのみ用意、`isConfigured()`は常にfalse）
+
+**Phase 5: 投稿ワークフロー**
+- `approved → scheduled → published` の状態遷移を実装
+- 各SNS/ブログへの公式投稿APIは未接続のため、「コピペしてそのまま投稿できるテキスト」を生成する `manualExportPublisher` で代替（外部APIは呼び出さない）
+
+**Phase 7: ROI最適化**
+- 収益実績の手動登録（`POST /api/revenue`）と、テーマ別のAIコスト対収益（ROI）算出
+- 赤字テーマをダッシュボードから停止（`Topic.status: archived`）できる
 
 ## セットアップ
 
@@ -44,6 +60,8 @@ http://localhost:3000 でダッシュボードが開きます。
 | `ANTHROPIC_API_KEY` | ✅ | 市場調査・スコアリング・企画AIの実行に必要 |
 | `YOUTUBE_API_KEY` | 任意 | 設定するとYouTubeの検索結果を市場調査AIの参考シグナルとして利用します |
 | `SERPAPI_KEY` | 任意 | 設定するとGoogleトレンド関連クエリを市場調査AIの参考シグナルとして利用します（[SerpApi](https://serpapi.com/)） |
+| `RAKUTEN_APP_ID` | 任意 | 設定するとアフィリエイトAIが楽天市場の実在商品を検索・選定できます（[楽天ウェブサービス](https://webservice.rakuten.co.jp/)） |
+| `USD_JPY_RATE` | 任意 | ROI算出時のドル円換算レート概算（デフォルト150） |
 
 未設定のAPIは自動的にスキップされ、市場調査AIはClaudeの知識ベースのみで提案を行います（DESIGN.md §11.2）。
 
@@ -60,8 +78,12 @@ http://localhost:3000 でダッシュボードが開きます。
 2. テーマをクリックして展開し、「コンテンツ企画を生成」を実行
    → 1テーマから YouTube/Instagram/TikTok/X/note/ブログ/PDF/電子書籍/テンプレート/アプリ化アイデア の企画案を一括生成します（`status: draft`）
 3. 生成された企画（YouTube/Instagram/TikTok/X/note/ブログ）ごとに「詳細生成（台本/原稿）」を実行
-   → 媒体別AIが台本・キャプション・見出し構成などを詳細生成します（`status: review`）。PDF/電子書籍/テンプレート/アプリ化アイデアの生成AIはPhase3〜4で実装予定です
-4. 内容を確認し「承認する」を実行すると `status: approved` になります。実際のSNS/ブログへの自動投稿（Publisher連携）はPhase5で実装します
+   → 媒体別AIが台本・キャプション・見出し構成などを詳細生成します（`status: review`）。PDF/電子書籍/テンプレート/アプリ化アイデアの生成AIはPhase3以降で実装予定です
+4. 「品質チェックを実行」を実行し、`qualityStatus: passed` になったら「承認する」を実行（`status: approved`）。高リスクな指摘があれば `status: flagged` となり、内容を修正して再チェックが必要です
+5. 「投稿予定にする」（`status: scheduled`）→ 実際に各SNS/ブログへ手動で投稿 →「投稿完了にする」（`status: published`）の順に進めます。「コピペ用テキストを表示」で投稿画面に貼り付けられるテキストを取得できます
+6. 投稿後、実際の収益が発生したら `published` なコンテンツの欄から金額を入力して「収益を記録」を実行してください
+7. テーマ展開時に「アフィリエイト商品候補を探す」を実行すると、楽天の実在商品からAIが紹介候補を選定します
+8. ページ下部の「ROI（AIコスト対収益）」パネルで、テーマ別のAIコスト対収益を確認できます。赤字テーマは「このテーマを停止する」で止められます
 
 ## ディレクトリ構成
 
@@ -69,4 +91,4 @@ http://localhost:3000 でダッシュボードが開きます。
 
 ## Next Phase
 
-Phase 2〜9 の計画は `DESIGN.md` §16 を参照してください。
+Phase 3（画像/動画/音声生成API選定）、Phase8（Discord操作）、Phase9（完全自動化）は未着手です。計画は `DESIGN.md` §16 を参照してください。
