@@ -198,6 +198,26 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
     }
   }
 
+  // X API等、実Publisherが設定されていれば実際に投稿する。未設定ならコピペ用テキストを表示するだけに留める。
+  async function attemptPublish(topicId: string, contentId: string) {
+    setBusyContentId(contentId);
+    try {
+      const res = await fetch(`/api/contents/${contentId}/publish`, { method: "POST" });
+      const json = await res.json();
+      if (res.ok && json.content) {
+        replaceContent(topicId, json.content);
+        alert(`投稿しました${json.result?.url ? `: ${json.result.url}` : ""}`);
+      } else {
+        if (json.exportedText) {
+          setExportText((prev) => ({ ...prev, [contentId]: json.exportedText }));
+        }
+        alert(json.error ?? "投稿に失敗しました");
+      }
+    } finally {
+      setBusyContentId(null);
+    }
+  }
+
   async function submitRevenue(topicId: string, contentId: string, platform: string) {
     const raw = revenueInput[contentId];
     const amount = Number(raw);
@@ -356,9 +376,16 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                               <button
                                 className="secondary"
                                 disabled={busyContentId === c.id}
+                                onClick={() => attemptPublish(topic.id, c.id)}
+                              >
+                                {busyContentId === c.id ? "処理中..." : "実APIで投稿する（設定時のみ）"}
+                              </button>
+                              <button
+                                className="secondary"
+                                disabled={busyContentId === c.id}
                                 onClick={() => callContentAction(topic.id, c.id, "schedule")}
                               >
-                                投稿予定にする
+                                投稿予定にする（手動投稿用）
                               </button>
                               <button className="secondary" onClick={() => loadExport(c.id)}>
                                 コピペ用テキストを表示
@@ -371,9 +398,16 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                               <button
                                 className="secondary"
                                 disabled={busyContentId === c.id}
+                                onClick={() => attemptPublish(topic.id, c.id)}
+                              >
+                                {busyContentId === c.id ? "処理中..." : "実APIで投稿する（設定時のみ）"}
+                              </button>
+                              <button
+                                className="secondary"
+                                disabled={busyContentId === c.id}
                                 onClick={() => callContentAction(topic.id, c.id, "mark-published")}
                               >
-                                投稿完了にする
+                                投稿完了にする（手動投稿済みの記録）
                               </button>
                               <button className="secondary" onClick={() => loadExport(c.id)}>
                                 コピペ用テキストを表示
@@ -383,6 +417,11 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
 
                           {c.status === "published" && (
                             <>
+                              {c.publishedUrl && (
+                                <a href={c.publishedUrl} target="_blank" rel="noreferrer" className="topic-meta">
+                                  投稿を見る
+                                </a>
+                              )}
                               <input
                                 placeholder="収益額(円)"
                                 style={{ width: 110 }}

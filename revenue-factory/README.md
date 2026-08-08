@@ -26,12 +26,13 @@
 - `severity: high` の指摘があれば `status: flagged` にし、品質チェック合格（`qualityStatus: passed`）まで承認をブロック
 
 **Phase 4: アフィリエイトAI**
-- 楽天ウェブサービスAPIから実在の商品を検索し、テーマとの関連性・収益期待値でAIが選定・スコアリング
-- Amazon PA-APIは署名実装と実績要件があるため未実装（インターフェースのみ用意、`isConfigured()`は常にfalse）
+- 楽天ウェブサービスAPI + Amazon PA-API 5.0（AWS SigV4署名を自前実装）から実在の商品を検索し、テーマとの関連性・収益期待値でAIが選定・スコアリング
+- Amazon側はコード上は実装済みですが、Associatesプログラムの利用条件（実績要件）を満たすアカウントでの動作確認はできていません
 
 **Phase 5: 投稿ワークフロー**
 - `approved → scheduled → published` の状態遷移を実装
-- 各SNS/ブログへの公式投稿APIは未接続のため、「コピペしてそのまま投稿できるテキスト」を生成する `manualExportPublisher` で代替（外部APIは呼び出さない）
+- **X (Twitter) API v2への実投稿**（OAuth 1.0a署名を自前実装）に対応。`X_API_KEY`等を設定すると`x_post`/`x_thread`は「実APIで投稿する」ボタンから実際にツイート/スレッドが投稿されます
+- それ以外の媒体（公式投稿API未接続）は「コピペしてそのまま投稿できるテキスト」を生成する `manualExportPublisher` で代替します
 
 **Phase 7: ROI最適化**
 - 収益実績の手動登録（`POST /api/revenue`）と、テーマ別のAIコスト対収益（ROI）算出
@@ -71,6 +72,8 @@ http://localhost:3000 でダッシュボードが開きます。
 | `RAKUTEN_APP_ID` | 任意 | 設定するとアフィリエイトAIが楽天市場の実在商品を検索・選定できます（[楽天ウェブサービス](https://webservice.rakuten.co.jp/)） |
 | `USD_JPY_RATE` | 任意 | ROI算出時のドル円換算レート概算（デフォルト150） |
 | `OPENAI_API_KEY` | 任意 | 設定するとサムネイル画像生成・ナレーション音声生成が使えます |
+| `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG` | 任意 | 設定するとアフィリエイトAIがAmazonの実在商品も検索対象に含めます（Associatesプログラムの利用条件を満たすアカウントが必要） |
+| `X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` | 任意 | 設定すると`x_post`/`x_thread`の実投稿ができます |
 
 未設定のAPIは自動的にスキップされ、市場調査AIはClaudeの知識ベースのみで提案を行います（DESIGN.md §11.2）。
 
@@ -90,7 +93,7 @@ http://localhost:3000 でダッシュボードが開きます。
    → 媒体別AIが台本・キャプション・見出し構成などを詳細生成します（`status: review`）。PDF/電子書籍/テンプレート/アプリ化アイデアの生成AIは今後のPhaseで実装予定です
 4. `OPENAI_API_KEY` を設定している場合、詳細生成後に「サムネイル画像を生成」「ナレーション音声を生成」も実行できます
 5. 「品質チェックを実行」を実行し、`qualityStatus: passed` になったら「承認する」を実行（`status: approved`）。高リスクな指摘があれば `status: flagged` となり、内容を修正して再チェックが必要です
-6. 「投稿予定にする」（`status: scheduled`）→ 実際に各SNS/ブログへ手動で投稿 →「投稿完了にする」（`status: published`）の順に進めます。「コピペ用テキストを表示」で投稿画面に貼り付けられるテキストを取得できます
+6. `X_API_KEY`等を設定していて対象が`x_post`/`x_thread`の場合は「実APIで投稿する」で実際に投稿できます（成功すると自動的に`status: published`になります）。それ以外は「投稿予定にする」（`status: scheduled`）→ 実際に各SNS/ブログへ手動で投稿 →「投稿完了にする」（`status: published`）の順に進めます。「コピペ用テキストを表示」で投稿画面に貼り付けられるテキストを取得できます
 7. 投稿後、実際の収益が発生したら `published` なコンテンツの欄から金額を入力して「収益を記録」を実行してください
 8. テーマ展開時に「アフィリエイト商品候補を探す」を実行すると、楽天の実在商品からAIが紹介候補を選定します
 9. ページ下部の「ROI（AIコスト対収益）」パネルで、テーマ別のAIコスト対収益を確認できます。赤字テーマは「このテーマを停止する」で止められます

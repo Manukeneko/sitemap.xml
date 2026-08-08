@@ -52,6 +52,7 @@ model Content {
   qualityNotes  String? // JSON: 品質チェックAIの指摘事項
   scheduledAt  DateTime?
   publishedAt  DateTime?
+  publishedUrl String? // 実Publisher経由で投稿した場合の投稿URL
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

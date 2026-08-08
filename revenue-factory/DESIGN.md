@@ -1,6 +1,6 @@
 # AI収益工場 全体設計書
 
-version: 0.4 (Phase 1・2・3・4・5・6・7・8 実装時点。Phase9は意図的に未実装)
+version: 0.5 (Phase 1・2・3・4・5・6・7・8 実装時点。Amazon PA-API/X API実投稿を追加。Phase9は意図的に未実装)
 最終更新: 2026-08-08
 
 > 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
@@ -196,8 +196,12 @@ revenue-factory/
         contents/[id]/quality-check/route.ts  品質チェックAI実行（review/flagged→review or flagged）
         contents/[id]/approve/route.ts        人間確認完了（review[qualityStatus=passed]→approved）
         contents/[id]/schedule/route.ts       投稿予定にする（approved→scheduled）
-        contents/[id]/mark-published/route.ts 投稿完了を記録（scheduled/approved→published）
+        contents/[id]/mark-published/route.ts 投稿完了を記録（scheduled/approved→published、手動投稿フロー用）
+        contents/[id]/publish/route.ts        実Publisherがあれば投稿を実行（approved/scheduled→published）
         contents/[id]/export/route.ts         コピペ投稿用テキストを取得（状態は変更しない）
+        contents/[id]/media/image/route.ts    サムネイル画像生成（Phase3）
+        contents/[id]/media/audio/route.ts    ナレーション音声生成（Phase3）
+        contents/route.ts         ステータス別コンテンツ一覧（Discordボット等が利用）
         revenue/route.ts          収益実績の手動登録・一覧
         roi/route.ts              テーマ別ROI（AIコスト対収益）
         stats/route.ts            ダッシュボード「今日」集計
@@ -221,17 +225,20 @@ revenue-factory/
         contentPlanner.ts    コンテンツ企画AI（§10.5相当）
       affiliate/             アフィリエイトAI（Phase4）
         types.ts             AffiliateSource インターフェース
+        awsSigV4.ts          Amazon PA-API用 AWS Signature V4 自前実装（Node crypto標準のみ）
         sources/
           rakuten.ts         楽天ウェブサービスAPI（実装済み）
-          amazon.ts          PA-API未実装のスタブ（isConfigured()常にfalse）
+          amazon.ts          PA-API 5.0 SearchItems（実装済み、実アカウントでの動作確認は未実施）
         selector.ts          実在商品候補からのAI選定・スコアリング
       quality/                品質チェックAI（Phase6）
         checker.ts
       publishing/              投稿ワークフロー（Phase5）
         types.ts               Publisher インターフェース
         formatForExport.ts     コピペ用テキスト整形
+        oauth1.ts               X API v2用 OAuth 1.0a署名 自前実装
         publishers/manualExport.ts フォールバックPublisher（外部API非呼び出し）
-        registry.ts             platform → Publisher 解決
+        publishers/xPublisher.ts   X API v2への実投稿Publisher（x_post/x_thread）
+        registry.ts             platform → Publisher 解決（xPostPublisher/xThreadPublisher優先、他はmanualExportにフォールバック）
       roi/                     ROI最適化（Phase7）
         engine.ts               テーマ別 AIコスト対収益 算出
       media/                   画像・音声生成（Phase3）
@@ -288,7 +295,7 @@ Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照
 | X AI（通常投稿・スレッド） | **実装** (`lib/generators/x.ts`) | 価値提供→自然な誘導の投稿・スレッドを生成 |
 | note AI（無料・有料記事） | **実装** (`lib/generators/note.ts`) | 無料→有料への導線を意識した記事を生成 |
 | SEOブログAI | **実装** (`lib/generators/blog.ts`) | 見出し・FAQ・メタディスクリプション込みの記事を生成 |
-| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPIから実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon PA-APIは未実装のスタブ |
+| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPI + Amazon PA-API 5.0（SigV4署名は`lib/affiliate/awsSigV4.ts`で自前実装）から実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon側は実アカウントでの動作確認は未実施（利用条件を満たすAssociatesアカウントが必要） |
 | 商品開発AI/アプリ開発AI | Phase6・Phase9で実装 | 自社商品企画・アプリ化判断 |
 | 品質チェックAI | **実装**（`lib/quality/checker.ts`） | 投稿前チェック（§20相当）。severity:highの指摘があれば`status:"flagged"`とし、承認（approve）をブロックする |
 
@@ -344,7 +351,7 @@ interface Publisher {
 }
 ```
 
-`lib/publishing/` に実装済み。現状は `manualExportPublisher`（コピペ用テキスト整形のみ、外部API呼び出しなし）が全platformのフォールバックとして動作する。各媒体の公式投稿APIをPublisherとして追加する際は、§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO）をPublisher呼び出しの前段でチェックすること。
+`lib/publishing/` に実装済み。`x_post` / `x_thread` は X API v2への実投稿Publisher（`lib/publishing/publishers/xPublisher.ts`、OAuth 1.0a自前実装）が環境変数設定時に有効になり、それ以外のplatformは `manualExportPublisher`（コピペ用テキスト整形のみ、外部API呼び出しなし）にフォールバックする。`GET /api/topics/[id]` から `getPublisher(platform)` で解決し、`POST /api/contents/:id/publish` がフォールバック時は自動投稿せずエラー+コピペ用テキストのみ返す設計になっている。各媒体の公式投稿APIをPublisherとして追加する際は、§13の自動化レベル（SAFE MODE / SEMI AUTO / FULL AUTO）をPublisher呼び出しの前段でチェックすること。
 
 ---
 
@@ -373,9 +380,9 @@ interface Publisher {
 `Content.status` は `draft → review → flagged → approved → scheduled → published → failed` の状態遷移で管理し、各媒体のPublisherがAPI制限・規約に抵触する処理を検知した場合は自動投稿を行わず `review`/`flagged` に差し戻す。
 
 **現在の実装状況（SAFE MODEの最初のステップとして実装済み）:**
-`draft`（企画のみ）→ 詳細生成AI実行 → `review`（台本/原稿生成済み）→ 品質チェックAI実行 → `review`（合格）or `flagged`（高リスク指摘あり、要修正）→ 人間が承認 → `approved` → `scheduled`（投稿予定にする）→ `published`（投稿完了を記録）。
+`draft`（企画のみ）→ 詳細生成AI実行 → `review`（台本/原稿生成済み）→ 品質チェックAI実行 → `review`（合格）or `flagged`（高リスク指摘あり、要修正）→ 人間が承認 → `approved` → `scheduled`（投稿予定にする）or 実Publisherで即時投稿 → `published`（投稿完了）。
 承認（approve）は品質チェックAIが `passed` を返していない限りブロックされる（§20）。
-実際の投稿は Publisher インターフェース（`lib/publishing/`）が担い、現状は `manualExportPublisher`（人間がそのままSNS/ブログの投稿画面に貼り付けられるテキストを整形して返すのみで、外部APIは呼び出さない）のみを実装している。YouTube Data API / Instagram Graph API 等、各媒体の公式投稿APIはアプリ審査完了後に platform 別 Publisher として追加し、SEMI AUTO・FULL AUTO はそれらが揃ってから解禁する。
+実際の投稿は Publisher インターフェース（`lib/publishing/`）が担う。`x_post`/`x_thread` は X API v2への実投稿（`xPublisher`）を実装済みで、`X_API_KEY`等が設定されていれば `POST /api/contents/:id/publish` が実際にツイート/スレッドを投稿し `status: published` と `publishedUrl` を記録する。それ以外のplatformは `manualExportPublisher`（人間がそのままSNS/ブログの投稿画面に貼り付けられるテキストを整形して返すのみで、外部APIは呼び出さない）にフォールバックし、投稿確認は人間が「投稿完了にする」で手動記録する。YouTube Data API / Instagram Graph API 等は動画・複数画像生成（Phase3の続き）が前提のため未実装、noteは公式APIが存在しないため実装していない。SEMI AUTO・FULL AUTOは、対象platformで実Publisherが揃い、規約・リスクを十分検証してから解禁する。
 
 ---
 
@@ -405,8 +412,8 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 | 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
 | 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
 | 3 | 画像・動画・音声生成API選定・連携 | **一部実装**（OpenAI Images API[gpt-image-1]でサムネイル画像、OpenAI TTS API[tts-1]でナレーション音声を生成。`OPENAI_API_KEY`未設定時は自動スキップ。生成物はローカル`public/generated/`に保存する初期実装で、本番はStorage差し替えが必要。動画生成は高コストのため引き続き未着手） |
-| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI + アフィリエイトAIによる商品選定・スコアリングを実装。Amazon PA-APIは署名実装が必要かつ実績要件があるため未実装のスタブ。ASP連携は未着手） |
-| 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移とコピペ投稿用テキスト出力[Publisher: manualExport]までを実装。YouTube/Instagram/TikTok/X等の公式投稿APIによる自動投稿は各媒体のアプリ審査完了後に追加） |
+| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI・Amazon PA-API 5.0[SigV4自前実装] + アフィリエイトAIによる商品選定・スコアリングを実装。Amazonは実アカウントでの動作未確認。ASP連携は未着手） |
+| 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移、コピペ投稿用テキスト出力[Publisher: manualExport]に加え、**X (Twitter) API v2への実投稿**[OAuth 1.0a自前実装]を実装。YouTube/Instagram/TikTok等は動画・複数画像生成が前提のため未実装、noteは公式APIが存在しないため未実装） |
 | 6 | 収益分析・AI品質チェック | **一部実装**（品質チェックAIを実装し、承認には品質チェック合格が必須。収益・視聴回数等を各媒体APIから自動取得する分析機能は未着手で、Phase7の手動収益登録で代替） |
 | 7 | AI自己改善ループ・ROI最適化・AI CEO | **一部実装**（テーマ別のAIコスト対収益[ROI]算出・赤字テーマの停止操作を実装。過去の成功パターンを翌日の企画に自動反映する自己改善ループ、AI CEOによる全体戦略立案は未着手） |
 | 8 | Discord操作 | **実装済み**（`discord-bot/`。`/start /status /report /trends /create /approve /schedule /top /stop /pause` を実装し、既存REST APIを呼び出すクライアントとして動作。`/stop`/`/pause`は常時稼働の自動処理自体が未実装のため参考情報を返す） |
