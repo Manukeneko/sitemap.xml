@@ -1,6 +1,6 @@
 # AI収益工場 全体設計書
 
-version: 0.5 (Phase 1・2・3・4・5・6・7・8 実装時点。Amazon PA-API/X API実投稿を追加。Phase9は意図的に未実装)
+version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテスト整備。Phase9は意図的に未実装)
 最終更新: 2026-08-08
 
 > 本ドキュメントはリポジトリ `manukeneko/sitemap.xml` 内の新規サブプロジェクト `revenue-factory/` の設計書です。既存の `検定ラボ`（静的サイト量産テンプレート、リポジトリ直下）とは別プロダクトとして、`revenue-factory/` 配下に独立した動的アプリケーションとして構築しています。将来的にはこの収益工場から「検定ラボ」のような静的サイトを1つの収益商品として量産管理することも可能な設計にしています。
@@ -263,6 +263,8 @@ revenue-factory/
 ```
 
 新しいSNS/AIプロバイダを追加する際は `lib/research/sources/*` または `lib/ai/providers/*` に1ファイル追加するだけで済むようにインターフェースを共通化している（拡張可能設計）。
+
+**テスト（Vitest）**: 外部APIキーなしで実行できる純粋関数を対象にユニットテストを整備している（`npm run test`）。対象は収益性スコアリングの加重平均（`lib/scoring/engine.test.ts`）、AWS SigV4署名（`lib/affiliate/awsSigV4.test.ts`）、OAuth 1.0a署名（`lib/publishing/oauth1.test.ts`）、コピペ用テキスト整形（`lib/publishing/formatForExport.test.ts`）。署名関数は日付/nonce/timestampをテスト用に注入できるようリファクタし、決定的な出力を検証している。DB・外部APIに依存するルート/AI呼び出し自体の自動テスト（モック含む）は未整備。
 
 ---
 

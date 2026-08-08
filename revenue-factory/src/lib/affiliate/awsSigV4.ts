@@ -18,8 +18,10 @@ export function signPaApiRequest(params: {
   accessKey: string;
   secretKey: string;
   body: string;
+  /** テスト用。省略時は現在時刻を使う */
+  date?: Date;
 }): SignedRequestHeaders {
-  const now = new Date();
+  const now = params.date ?? new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, ""); // YYYYMMDDTHHMMSSZ
   const dateStamp = amzDate.slice(0, 8);
 
