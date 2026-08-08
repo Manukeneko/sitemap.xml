@@ -91,7 +91,7 @@ version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテ
 | AI推論（補助） | OpenAI API / Google Gemini API | AI Routerでのコスト比較・画像生成(gpt-image等)・埋め込み | Phase1では未接続、Router設計のみ用意 |
 | トレンド | Google Trends（非公式） | 検索需要調査 | 公式APIなし。SerpApi等の有料代替も比較対象 |
 | 動画 | YouTube Data API v3 / YouTube Analytics API | トレンド取得・投稿・実績取得 | 無料枠あり（1日1万ユニット） |
-| SNS | X API v2 | 投稿・分析 | Freeプランは投稿数が非常に限定的。本格運用はBasic以上が必要（有料） |
+| SNS | X API v2 | 投稿・分析 | Freeプランは投稿数が非常に限定的。本格運用はBasic以上が必要（有料）。開発者申請の「データ/APIのユースケース」欄には自アカウントへの投稿のみで再配布・転売しない旨を記載する |
 | SNS | Instagram Graph API (Meta) | 投稿・分析 | ビジネスアカウント必須、審査あり |
 | SNS | TikTok Content Posting API | 投稿 | アプリ審査必須 |
 | SNS | note | 公式APIなし | 手動運用 or 非公式手段はリスクが高いため要検討 |
@@ -134,7 +134,7 @@ version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテ
 | Claude Opus 5 | Input $5 / 1M tokens、Output $25 / 1M tokens |
 | Claude Haiku 4.5 | Input $1 / 1M tokens、Output $5 / 1M tokens |
 | YouTube Data API v3 | 無料（1日1万クォータユニット、超過分は要申請） |
-| X API | Free: 投稿数が月1500件程度に制限。実運用にはBasic（月額$200〜）以上が事実上必要 |
+| X API | Free: 投稿数が月1500件程度に制限。実運用にはBasic（月額$200〜）以上が事実上必要。詳細は下記注記参照 |
 | Instagram Graph API | 無料（Meta審査あり） |
 | TikTok Content Posting API | 無料（審査あり） |
 | Amazon PA-API | 無料（ただし一定期間の売上実績維持が必要） |
@@ -145,6 +145,8 @@ version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテ
 | 画像/音声/動画生成 | サービス次第（従量課金が中心）。Phase3で選定時に確定し本表を更新する |
 
 > 料金は変動するため、実装時・課金発生前に必ず公式最新情報を確認すること。特にX APIは価格改定が頻繁。
+>
+> **Xの収益化制度について（2026年8月時点）**: 返信スレッド広告の収益分配「Creator Revenue Sharing Program」は2026年9月7日で終了（新規登録は8月7日付で停止済み）。後継の「Original Content Rewards Program」は X Premium契約＋認証済みフォロワー500人以上＋直近90日で50万インプレッション以上が条件で、報酬はPremium会員のホームタイムライン表示（インプレッション）ベースに変わる。本プロジェクトはXを収益源そのものではなく他媒体（アフィリエイト・自社商品・note等）への集客/誘導チャネルとして位置づけているため（DESIGN.md §1, §13）設計への影響はないが、Xでのコンテンツ戦略を評価する際は「エンゲージメント最大化」より「フォロワー数・インプレッションの積み上げ」を指標にする方が今後の制度と整合する。
 
 ---
 
