@@ -229,7 +229,7 @@ revenue-factory/
         types.ts             AffiliateSource インターフェース
         awsSigV4.ts          Amazon PA-API用 AWS Signature V4 自前実装（Node crypto標準のみ）
         sources/
-          rakuten.ts         楽天ウェブサービスAPI（実装済み）
+          rakuten.ts         楽天ウェブサービスAPI（実装済み。2026年新API基盤[アクセスキー+Referer必須]対応。実クレデンシャルでのライブ疎通は環境のegress制限により未確認、実装はWebSearchで確認できた仕様に基づく最善実装）
           amazon.ts          PA-API 5.0 SearchItems（実装済み、実アカウントでの動作確認は未実施）
         selector.ts          実在商品候補からのAI選定・スコアリング
       quality/                品質チェックAI（Phase6）
@@ -299,7 +299,7 @@ Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照
 | X AI（通常投稿・スレッド） | **実装** (`lib/generators/x.ts`) | 価値提供→自然な誘導の投稿・スレッドを生成 |
 | note AI（無料・有料記事） | **実装** (`lib/generators/note.ts`) | 無料→有料への導線を意識した記事を生成 |
 | SEOブログAI | **実装** (`lib/generators/blog.ts`) | 見出し・FAQ・メタディスクリプション込みの記事を生成 |
-| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPI + Amazon PA-API 5.0（SigV4署名は`lib/affiliate/awsSigV4.ts`で自前実装）から実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon側は実アカウントでの動作確認は未実施（利用条件を満たすAssociatesアカウントが必要） |
+| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPI + Amazon PA-API 5.0（SigV4署名は`lib/affiliate/awsSigV4.ts`で自前実装）から実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon側は実アカウントでの動作確認は未実施（利用条件を満たすAssociatesアカウントが必要）。楽天側は2026年の新API基盤（`RAKUTEN_ACCESS_KEY`によるBearer認証 + `RAKUTEN_REFERER_URL`一致必須）に対応済みだが、開発環境のネットワーク制限によりライブ疎通は未確認 |
 | 商品開発AI/アプリ開発AI | Phase6・Phase9で実装 | 自社商品企画・アプリ化判断 |
 | 品質チェックAI | **実装**（`lib/quality/checker.ts`） | 投稿前チェック（§20相当）。severity:highの指摘があれば`status:"flagged"`とし、承認（approve）をブロックする |
 

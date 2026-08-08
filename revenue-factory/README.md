@@ -80,7 +80,8 @@ http://localhost:3000 でダッシュボードが開きます。
 | `ANTHROPIC_API_KEY` | ✅ | 市場調査・スコアリング・企画AIの実行に必要 |
 | `YOUTUBE_API_KEY` | 任意 | 設定するとYouTubeの検索結果を市場調査AIの参考シグナルとして利用します |
 | `SERPAPI_KEY` | 任意 | 設定するとGoogleトレンド関連クエリを市場調査AIの参考シグナルとして利用します（[SerpApi](https://serpapi.com/)） |
-| `RAKUTEN_APP_ID` | 任意 | 設定するとアフィリエイトAIが楽天市場の実在商品を検索・選定できます（[楽天ウェブサービス](https://webservice.rakuten.co.jp/)） |
+| `RAKUTEN_APP_ID` / `RAKUTEN_ACCESS_KEY` | 任意 | 設定するとアフィリエイトAIが楽天市場の実在商品を検索・選定できます（[楽天ウェブサービス](https://webservice.rakuten.co.jp/)）。2026年の新API基盤移行により両方必須 |
+| `RAKUTEN_AFFILIATE_ID` / `RAKUTEN_REFERER_URL` / `RAKUTEN_API_BASE_URL` | 任意 | 楽天API用の追加設定。`RAKUTEN_REFERER_URL` はアプリ登録時の「許可されたWebサイト」と一致させる必要あり（未設定だと `HTTP_REFERRER_MISSING` エラー） |
 | `USD_JPY_RATE` | 任意 | ROI算出時のドル円換算レート概算（デフォルト150） |
 | `OPENAI_API_KEY` | 任意 | 設定するとサムネイル画像生成・ナレーション音声生成が使えます |
 | `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG` | 任意 | 設定するとアフィリエイトAIがAmazonの実在商品も検索対象に含めます（Associatesプログラムの利用条件を満たすアカウントが必要） |
