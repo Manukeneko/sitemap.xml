@@ -1,6 +1,6 @@
 // Phase 1 データベーススキーマ
-// 開発時は SQLite (file:./dev.db) をデフォルトとし、本番は DATABASE_URL を
-// PostgreSQL (Supabase) の接続文字列に差し替えて provider を "postgresql" にする。
+// Vercel等のサーバーレス環境はファイルシステムが永続化されないため SQLite は使えない。
+// PostgreSQL (Supabase等) の接続文字列を DATABASE_URL に設定して使う。
 // 詳細は DESIGN.md §9, README.md を参照。
 
 generator client {
@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

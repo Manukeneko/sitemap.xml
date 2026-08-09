@@ -68,8 +68,7 @@ version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテ
 | レイヤ | 採用 | 理由 |
 |---|---|---|
 | Frontend / BFF | Next.js 14 (App Router) + TypeScript + Tailwind CSS | Vercel無料枠でホスティング可、API RouteとUIを1リポジトリで管理でき初期コスト最小 |
-| DB (開発) | SQLite (Prisma) | 依存ゼロでローカル/CI動作、口座不要 |
-| DB (本番) | PostgreSQL (Supabase) | 無料枠500MB、Auth/Storageも同一プラットフォームで拡張しやすい |
+| DB | PostgreSQL (Supabase) | 無料枠500MB、Auth/Storageも同一プラットフォームで拡張しやすい。当初はSQLiteも検討したが、Vercel等サーバーレス環境ではファイルシステムが永続化されず書き込みできないため、開発/本番ともPostgreSQL統一に変更 |
 | ORM | Prisma | スキーマ駆動、マイグレーション管理が容易 |
 | 自動化/バッチ | Next.js Route Handler + Vercel Cron（Phase1-2）→ n8n（Phase5以降、複雑な条件分岐・SNS API連携が増えたら） | 初期は依存を増やさない。複雑化したらn8nへ移行 |
 | AI（推論・企画・スコアリング） | Claude API (Anthropic) | 長文構成・多段階判断・ツール利用に強く、本プロジェクトのAI CEO/企画AI/品質AIの中核 |
@@ -153,7 +152,7 @@ version: 0.6 (Phase 1・2・3・4・5・6・7・8 実装時点 + ユニットテ
 ## 6. 無料で使えるもの（Phase1〜2で採用）
 
 - Next.js / Vercel Hobby
-- Supabase Free（または開発時はSQLite）
+- Supabase Free
 - Prisma
 - YouTube Data API（無料枠内）
 - 楽天ウェブサービスAPI

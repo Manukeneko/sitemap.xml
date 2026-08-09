@@ -52,7 +52,8 @@
 cd revenue-factory
 npm install
 cp .env.example .env
-# .env を編集し、最低限 ANTHROPIC_API_KEY を設定してください
+# .env を編集し、DATABASE_URL（Supabase等のPostgreSQL接続文字列）と
+# 最低限 ANTHROPIC_API_KEY を設定してください
 npm run db:generate
 npm run db:push
 npm run db:seed   # 任意: サンプルデータを投入してダッシュボードの見た目を確認できます
@@ -76,7 +77,7 @@ http://localhost:3000 でダッシュボードが開きます。
 
 | 変数 | 必須 | 説明 |
 |---|---|---|
-| `DATABASE_URL` | ✅ | 開発時は `file:./dev.db`（SQLite）でそのまま動作します |
+| `DATABASE_URL` | ✅ | PostgreSQLの接続文字列（Supabase等）。Vercel等サーバーレス環境はファイルシステムが永続化されないためSQLiteは使えません |
 | `ANTHROPIC_API_KEY` | ✅ | 市場調査・スコアリング・企画AIの実行に必要 |
 | `YOUTUBE_API_KEY` | 任意 | 設定するとYouTubeの検索結果を市場調査AIの参考シグナルとして利用します |
 | `SERPAPI_KEY` | 任意 | 設定するとGoogleトレンド関連クエリを市場調査AIの参考シグナルとして利用します（[SerpApi](https://serpapi.com/)） |
@@ -89,11 +90,15 @@ http://localhost:3000 でダッシュボードが開きます。
 
 未設定のAPIは自動的にスキップされ、市場調査AIはClaudeの知識ベースのみで提案を行います（DESIGN.md §11.2）。
 
-## 本番DB（Supabase等のPostgreSQL）への切り替え
+## データベース（Supabase等のPostgreSQL）
 
-1. `prisma/schema.prisma` の `datasource db` の `provider` を `"postgresql"` に変更
-2. `DATABASE_URL` をSupabaseの接続文字列に変更
-3. `npm run db:push`（または `npx prisma migrate deploy`）
+`DATABASE_URL` にPostgreSQLの接続文字列を設定した状態で、初回のみテーブルを作成します。
+
+```bash
+npm run db:push   # または npx prisma migrate deploy
+```
+
+Vercelにデプロイする場合は、Vercel側のEnvironment Variablesにも同じ`DATABASE_URL`を設定してください。
 
 ## 使い方
 
