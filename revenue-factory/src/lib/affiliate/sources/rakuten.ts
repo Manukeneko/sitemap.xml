@@ -6,7 +6,9 @@ import type { AffiliateItem, AffiliateSource } from "@/lib/affiliate/types";
 // 2026年2月〜5月に楽天ウェブサービスの新API基盤への移行が行われ、旧エンドポイント
 // (app.rakuten.co.jp/services/api/...) は2026-05-14に完全停止した。新基盤では
 // アプリケーションID(applicationId)に加えて、
-//   - アクセスキー（Authorization: Bearer <accessKey> ヘッダー）
+//   - アクセスキー（accessKeyクエリパラメータ。実クレデンシャルでの動作確認により、
+//     Authorization: Bearerヘッダーでは"accessKey must be present as a query parameter
+//     or in the header"[400]エラーになることを確認済み。クエリパラメータ形式が正）
 //   - Referer/Origin ヘッダー（アプリ登録時の「許可されたWebサイト」と一致させる必要あり）
 // が必須になっている。エンドポイントのパス/バージョンは公式ドキュメント未確認のため
 // RAKUTEN_API_BASE_URL で上書きできるようにしてある（デフォルト値が変わっていた場合の保険）。
@@ -31,11 +33,12 @@ export const rakutenSource: AffiliateSource = {
     url.searchParams.set("format", "json");
     url.searchParams.set("keyword", keyword);
     url.searchParams.set("applicationId", appId);
+    url.searchParams.set("accessKey", accessKey);
     url.searchParams.set("hits", "10");
     url.searchParams.set("sort", "-reviewCount"); // レビューが多い=一定の販売実績がある商品を優先
     if (affiliateId) url.searchParams.set("affiliateId", affiliateId);
 
-    const headers: Record<string, string> = { Authorization: `Bearer ${accessKey}` };
+    const headers: Record<string, string> = {};
     if (refererUrl) {
       headers.Referer = refererUrl;
       headers.Origin = new URL(refererUrl).origin;
