@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Topic, Content, Product, MediaAsset } from "@prisma/client";
 
 type ContentWithMedia = Content & { mediaAssets?: MediaAsset[] };
@@ -55,6 +55,10 @@ interface TopicDetail {
 
 export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
   const [topics, setTopics] = useState(initialTopics);
+
+  useEffect(() => {
+    setTopics(initialTopics);
+  }, [initialTopics]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detailByTopic, setDetailByTopic] = useState<Record<string, TopicDetail>>({});
   const [planningId, setPlanningId] = useState<string | null>(null);
