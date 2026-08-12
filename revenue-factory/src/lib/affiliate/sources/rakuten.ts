@@ -10,11 +10,16 @@ import type { AffiliateItem, AffiliateSource } from "@/lib/affiliate/types";
 //     Authorization: Bearerヘッダーでは"accessKey must be present as a query parameter
 //     or in the header"[400]エラーになることを確認済み。クエリパラメータ形式が正）
 //   - Referer/Origin ヘッダー（アプリ登録時の「許可されたWebサイト」と一致させる必要あり）
-// が必須になっている。エンドポイントのパス/バージョンは公式ドキュメント未確認のため
-// RAKUTEN_API_BASE_URL で上書きできるようにしてある（デフォルト値が変わっていた場合の保険）。
+// が必須になっている。
+//
+// エンドポイントのバージョン識別子(末尾のYYYYMMDD)は、公式ドキュメント
+// (webservice.rakuten.co.jp/documentation/ichiba-item-search)で確認した最新版
+// 20260701 を使用する（実クレデンシャルでのライブテストで、存在しない旧バージョンだと
+// "API Configuration not found"[400 wrong_parameter]になることを確認済み）。
+// RAKUTEN_API_BASE_URL で上書き可能（将来さらにバージョンが変わった場合の保険）。
 //
 // RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY が未設定の場合は空配列を返す。
-const DEFAULT_BASE_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20170706";
+const DEFAULT_BASE_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701";
 
 export const rakutenSource: AffiliateSource = {
   name: "rakuten",
