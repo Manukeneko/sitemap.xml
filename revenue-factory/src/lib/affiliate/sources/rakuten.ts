@@ -43,11 +43,13 @@ export const rakutenSource: AffiliateSource = {
     url.searchParams.set("sort", "-reviewCount"); // レビューが多い=一定の販売実績がある商品を優先
     if (affiliateId) url.searchParams.set("affiliateId", affiliateId);
 
+    // RAKUTEN_DEBUG_NO_REFERER=true で一時的にReferer/Originヘッダーを外せる。
+    // "API Configuration not found"エラーの原因切り分け用のデバッグフラグ。
     const headers: Record<string, string> = {};
-    if (refererUrl) {
+    if (refererUrl && process.env.RAKUTEN_DEBUG_NO_REFERER !== "true") {
       headers.Referer = refererUrl;
       headers.Origin = new URL(refererUrl).origin;
-    } else {
+    } else if (!refererUrl) {
       console.warn(
         "[rakutenSource] RAKUTEN_REFERER_URL is not set. The new Rakuten API rejects requests without a Referer header matching the registered application URL (HTTP_REFERRER_MISSING)."
       );
