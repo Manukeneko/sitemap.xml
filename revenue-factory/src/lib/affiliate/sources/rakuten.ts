@@ -61,12 +61,13 @@ export const rakutenSource: AffiliateSource = {
 
     try {
       const res = await fetch(url.toString(), { headers });
+      const rawText = await res.text();
       if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        console.warn(`[rakutenSource] API error: ${res.status} ${errText.slice(0, 300)}`);
+        console.warn(`[rakutenSource] API error: ${res.status} ${rawText.slice(0, 300)}`);
         return [];
       }
-      const json = (await res.json()) as {
+      const json = JSON.parse(rawText) as {
+        count?: number;
         Items?: Array<{
           Item: {
             itemName: string;
@@ -77,6 +78,9 @@ export const rakutenSource: AffiliateSource = {
           };
         }>;
       };
+      console.log(
+        `[rakutenSource] success: status=${res.status} count=${json.count ?? "?"} items=${(json.Items ?? []).length}`
+      );
       return (json.Items ?? []).map(({ Item }) => ({
         source: "rakuten",
         name: Item.itemName,
