@@ -228,7 +228,7 @@ revenue-factory/
         types.ts             AffiliateSource インターフェース
         awsSigV4.ts          Amazon PA-API用 AWS Signature V4 自前実装（Node crypto標準のみ）
         sources/
-          rakuten.ts         楽天ウェブサービスAPI（実装済み。2026年新API基盤[アクセスキー+Referer必須]対応。実クレデンシャルでのライブ疎通は環境のegress制限により未確認、実装はWebSearchで確認できた仕様に基づく最善実装）
+          rakuten.ts         楽天ウェブサービスAPI（実装済み。2026年新API基盤[アクセスキー+Referer必須]対応。実クレデンシャルでのライブ疎通を確認済み[2026-08-13、count=4385 items=10の実商品データ取得を確認]）
           amazon.ts          PA-API 5.0 SearchItems（実装済み、実アカウントでの動作確認は未実施）
         selector.ts          実在商品候補からのAI選定・スコアリング
       quality/                品質チェックAI（Phase6）
@@ -298,7 +298,7 @@ Phase1で実装する最小スキーマ（Prisma、`prisma/schema.prisma` 参照
 | X AI（通常投稿・スレッド） | **実装** (`lib/generators/x.ts`) | 価値提供→自然な誘導の投稿・スレッドを生成 |
 | note AI（無料・有料記事） | **実装** (`lib/generators/note.ts`) | 無料→有料への導線を意識した記事を生成 |
 | SEOブログAI | **実装** (`lib/generators/blog.ts`) | 見出し・FAQ・メタディスクリプション込みの記事を生成 |
-| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPI + Amazon PA-API 5.0（SigV4署名は`lib/affiliate/awsSigV4.ts`で自前実装）から実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon側は実アカウントでの動作確認は未実施（利用条件を満たすAssociatesアカウントが必要）。楽天側は2026年の新API基盤（`RAKUTEN_ACCESS_KEY`によるBearer認証 + `RAKUTEN_REFERER_URL`一致必須）に対応済みだが、開発環境のネットワーク制限によりライブ疎通は未確認 |
+| アフィリエイトAI | **実装**（`lib/affiliate/selector.ts`） | 楽天ウェブサービスAPI + Amazon PA-API 5.0（SigV4署名は`lib/affiliate/awsSigV4.ts`で自前実装）から実在商品を取得し、テーマとの関連性・収益期待値でスコアリングして`Product`に保存。Amazon側は実アカウントでの動作確認は未実施（利用条件を満たすAssociatesアカウントが必要）。楽天側は2026年の新API基盤（`RAKUTEN_ACCESS_KEY`によるaccessKeyクエリパラメータ認証 + `RAKUTEN_REFERER_URL`）に対応し、実クレデンシャルでのライブ疎通を確認済み。検索前にHaikuでコンテンツ企画タイトルから短いEC検索キーワードを抽出するステップ（`extractSearchKeyword`）を追加し、タイトルそのままでは0件になる問題を解消 |
 | 商品開発AI/アプリ開発AI | Phase6・Phase9で実装 | 自社商品企画・アプリ化判断 |
 | 品質チェックAI | **実装**（`lib/quality/checker.ts`） | 投稿前チェック（§20相当）。severity:highの指摘があれば`status:"flagged"`とし、承認（approve）をブロックする |
 
@@ -415,7 +415,7 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 | 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
 | 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
 | 3 | 画像・動画・音声生成API選定・連携 | **一部実装**（OpenAI Images API[gpt-image-1]でサムネイル画像、OpenAI TTS API[tts-1]でナレーション音声を生成。`OPENAI_API_KEY`未設定時は自動スキップ。生成物はローカル`public/generated/`に保存する初期実装で、本番はStorage差し替えが必要。動画生成は高コストのため引き続き未着手） |
-| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI・Amazon PA-API 5.0[SigV4自前実装] + アフィリエイトAIによる商品選定・スコアリングを実装。Amazonは実アカウントでの動作未確認。ASP連携は未着手） |
+| 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI[実クレデンシャルでライブ動作確認済み]・Amazon PA-API 5.0[SigV4自前実装、実アカウントでの動作未確認] + アフィリエイトAIによる商品選定・スコアリングを実装。ASP連携は未着手） |
 | 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移、コピペ投稿用テキスト出力[Publisher: manualExport]に加え、**X (Twitter) API v2への実投稿**[OAuth 1.0a自前実装]を実装。YouTube/Instagram/TikTok等は動画・複数画像生成が前提のため未実装、noteは公式APIが存在しないため未実装） |
 | 6 | 収益分析・AI品質チェック | **一部実装**（品質チェックAIを実装し、承認には品質チェック合格が必須。収益・視聴回数等を各媒体APIから自動取得する分析機能は未着手で、Phase7の手動収益登録で代替） |
 | 7 | AI自己改善ループ・ROI最適化・AI CEO | **一部実装**（テーマ別のAIコスト対収益[ROI]算出・赤字テーマの停止操作を実装。過去の成功パターンを翌日の企画に自動反映する自己改善ループ、AI CEOによる全体戦略立案は未着手） |
