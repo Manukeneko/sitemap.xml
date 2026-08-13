@@ -66,7 +66,7 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
   const [busyContentId, setBusyContentId] = useState<string | null>(null);
   const [exportText, setExportText] = useState<Record<string, string>>({});
   const [revenueInput, setRevenueInput] = useState<Record<string, string>>({});
-  const [mediaBusyContentId, setMediaBusyContentId] = useState<string | null>(null);
+  const [mediaBusyKey, setMediaBusyKey] = useState<string | null>(null);
 
   // ステータス更新系のAPIはmediaAssetsを含まないContentしか返さないため、
   // 既存のmediaAssetsをマージして表示が消えないようにする
@@ -95,17 +95,18 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
   }
 
   async function generateMedia(topicId: string, contentId: string, kind: "image" | "audio") {
-    setMediaBusyContentId(contentId);
+    const key = `${contentId}:${kind}`;
+    setMediaBusyKey(key);
     try {
       const res = await fetch(`/api/contents/${contentId}/media/${kind}`, { method: "POST" });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({ error: `サーバーエラー(${res.status})` }));
       if (res.ok) {
         addMediaAsset(topicId, contentId, json.asset);
       } else {
         alert(json.error ?? "メディア生成に失敗しました");
       }
     } finally {
-      setMediaBusyContentId(null);
+      setMediaBusyKey(null);
     }
   }
 
@@ -455,17 +456,17 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                               <button
                                 className="secondary"
-                                disabled={mediaBusyContentId === c.id}
+                                disabled={mediaBusyKey === `${c.id}:image`}
                                 onClick={() => generateMedia(topic.id, c.id, "image")}
                               >
-                                {mediaBusyContentId === c.id ? "生成中..." : "サムネイル画像を生成（要OPENAI_API_KEY）"}
+                                {mediaBusyKey === `${c.id}:image` ? "生成中..." : "サムネイル画像を生成（要OPENAI_API_KEY）"}
                               </button>
                               <button
                                 className="secondary"
-                                disabled={mediaBusyContentId === c.id}
+                                disabled={mediaBusyKey === `${c.id}:audio`}
                                 onClick={() => generateMedia(topic.id, c.id, "audio")}
                               >
-                                {mediaBusyContentId === c.id ? "生成中..." : "ナレーション音声を生成（要OPENAI_API_KEY）"}
+                                {mediaBusyKey === `${c.id}:audio` ? "生成中..." : "ナレーション音声を生成（要OPENAI_API_KEY）"}
                               </button>
                             </div>
                             {c.mediaAssets && c.mediaAssets.length > 0 && (
