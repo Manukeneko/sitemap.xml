@@ -9,7 +9,8 @@ import type { AffiliateItem, AffiliateSource } from "@/lib/affiliate/types";
 //   - アクセスキー（accessKeyクエリパラメータ。実クレデンシャルでの動作確認により、
 //     Authorization: Bearerヘッダーでは"accessKey must be present as a query parameter
 //     or in the header"[400]エラーになることを確認済み。クエリパラメータ形式が正）
-//   - Referer/Origin ヘッダー（アプリ登録時の「許可されたWebサイト」と一致させる必要あり）
+//   - Referer/Origin ヘッダー（アプリ登録時の「許可されたWebサイト」と一致させる必要あり。
+//     無くても現時点では動作するが、公式仕様に沿って常に送る）
 // が必須になっている。
 //
 // エンドポイントのバージョン識別子(末尾のYYYYMMDD)は、公式ドキュメント
@@ -19,6 +20,8 @@ import type { AffiliateItem, AffiliateSource } from "@/lib/affiliate/types";
 // RAKUTEN_API_BASE_URL で上書き可能（将来さらにバージョンが変わった場合の保険）。
 //
 // RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY が未設定の場合は空配列を返す。
+// 実クレデンシャルでの動作確認済み(2026-08-13、keyword=掃除機フィルター で
+// count=4385 items=10 の実商品データ取得を確認)。
 const DEFAULT_BASE_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701";
 
 export const rakutenSource: AffiliateSource = {
@@ -43,21 +46,15 @@ export const rakutenSource: AffiliateSource = {
     url.searchParams.set("sort", "-reviewCount"); // レビューが多い=一定の販売実績がある商品を優先
     if (affiliateId) url.searchParams.set("affiliateId", affiliateId);
 
-    // RAKUTEN_DEBUG_NO_REFERER=true で一時的にReferer/Originヘッダーを外せる。
-    // "API Configuration not found"エラーの原因切り分け用のデバッグフラグ。
     const headers: Record<string, string> = {};
-    if (refererUrl && process.env.RAKUTEN_DEBUG_NO_REFERER !== "true") {
+    if (refererUrl) {
       headers.Referer = refererUrl;
       headers.Origin = new URL(refererUrl).origin;
-    } else if (!refererUrl) {
+    } else {
       console.warn(
-        "[rakutenSource] RAKUTEN_REFERER_URL is not set. The new Rakuten API rejects requests without a Referer header matching the registered application URL (HTTP_REFERRER_MISSING)."
+        "[rakutenSource] RAKUTEN_REFERER_URL is not set. The Rakuten API may reject requests without a Referer header matching the registered application URL (HTTP_REFERRER_MISSING)."
       );
     }
-
-    const debugUrl = new URL(url.toString());
-    debugUrl.searchParams.set("accessKey", "***");
-    console.log(`[rakutenSource] request: ${debugUrl.toString()} headers=${JSON.stringify(headers)}`);
 
     try {
       const res = await fetch(url.toString(), { headers });
