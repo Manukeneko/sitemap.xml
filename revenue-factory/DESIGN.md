@@ -414,7 +414,7 @@ Botは既存のREST API（`/api/*`）を呼び出すクライアントとして�
 |---|---|---|
 | 1 | AI収益司令塔（ダッシュボード・市場調査AI・テーマランキング・収益期待値・コンテンツ企画） | **実装済み** |
 | 2 | コンテンツ生成（YouTube台本・Shorts・Instagram・TikTok・X・note・ブログ） | **実装済み** |
-| 3 | 画像・動画・音声生成API選定・連携 | **一部実装**（OpenAI Images API[gpt-image-1]でサムネイル画像、OpenAI TTS API[tts-1]でナレーション音声を生成。`OPENAI_API_KEY`未設定時は自動スキップ。生成物はローカル`public/generated/`に保存する初期実装で、本番はStorage差し替えが必要。動画生成は高コストのため引き続き未着手） |
+| 3 | 画像・動画・音声生成API選定・連携 | **一部実装**（OpenAI Images API[gpt-image-1]でサムネイル画像、OpenAI TTS API[tts-1]でナレーション音声を生成。`OPENAI_API_KEY`未設定時は自動スキップ。生成物はVercel Blob[本番]/ローカル`public/generated/`[開発]に保存、実クレデンシャルでライブ動作確認済み。動画生成は高コストのため引き続き未着手） |
 | 4 | アフィリエイト管理（Amazon/楽天/ASP比較・自動選定） | **一部実装**（楽天ウェブサービスAPI[実クレデンシャルでライブ動作確認済み]・Amazon PA-API 5.0[SigV4自前実装、実アカウントでの動作未確認] + アフィリエイトAIによる商品選定・スコアリングを実装。ASP連携は未着手） |
 | 5 | 投稿API連携（SAFE MODE中心） | **一部実装**（`approved → scheduled → published` の状態遷移、コピペ投稿用テキスト出力[Publisher: manualExport]に加え、**X (Twitter) API v2への実投稿**[OAuth 1.0a自前実装]を実装。YouTube/Instagram/TikTok等は動画・複数画像生成が前提のため未実装、noteは公式APIが存在しないため未実装） |
 | 6 | 収益分析・AI品質チェック | **一部実装**（品質チェックAIを実装し、承認には品質チェック合格が必須。収益・視聴回数等を各媒体APIから自動取得する分析機能は未着手で、Phase7の手動収益登録で代替） |

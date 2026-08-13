@@ -40,7 +40,7 @@
 
 **Phase 3: 画像・音声生成**
 - OpenAI Images API（gpt-image-1）でサムネイル画像、OpenAI TTS API（tts-1）でナレーション音声を生成
-- `OPENAI_API_KEY` 未設定時は自動スキップ。生成物は`BLOB_READ_WRITE_TOKEN`設定時はVercel Blobに、未設定時（ローカル開発）は`public/generated/`に保存する
+- `OPENAI_API_KEY` 未設定時は自動スキップ。生成物は`BLOB_READ_WRITE_TOKEN`設定時はVercel Blobに、未設定時（ローカル開発）は`public/generated/`に保存する（実クレデンシャルでライブ動作確認済み。**Vercel BlobストアはPublicアクセスで作成すること**。Privateだとアップロード時に`Cannot use public access on a private store`エラーになる）
 
 **Phase 8: Discord操作パネル**
 - `discord-bot/`（別プロセス）に `/start /status /report /trends /create /approve /schedule /top /stop /pause` を実装
@@ -85,7 +85,7 @@ http://localhost:3000 でダッシュボードが開きます。
 | `RAKUTEN_AFFILIATE_ID` / `RAKUTEN_REFERER_URL` / `RAKUTEN_API_BASE_URL` | 任意 | 楽天API用の追加設定。`RAKUTEN_REFERER_URL` はアプリ登録時の「許可されたWebサイト」と一致させる必要あり（未設定だと `HTTP_REFERRER_MISSING` エラー） |
 | `USD_JPY_RATE` | 任意 | ROI算出時のドル円換算レート概算（デフォルト150） |
 | `OPENAI_API_KEY` | 任意 | 設定するとサムネイル画像生成・ナレーション音声生成が使えます |
-| `BLOB_READ_WRITE_TOKEN` | 本番のみ必須 | Vercel Blobの保存先トークン（Vercelで Storage → Blob を作成すると自動付与）。`OPENAI_API_KEY`を本番で使う場合は必須（無いと生成保存に失敗します） |
+| `BLOB_READ_WRITE_TOKEN` | 本番のみ必須 | Vercel Blobの保存先トークン（Vercelで Storage → Blob を**Publicアクセスで**作成すると自動付与）。`OPENAI_API_KEY`を本番で使う場合は必須（無いと生成保存に失敗します） |
 | `AMAZON_ACCESS_KEY` / `AMAZON_SECRET_KEY` / `AMAZON_PARTNER_TAG` | 任意 | 設定するとアフィリエイトAIがAmazonの実在商品も検索対象に含めます（Associatesプログラムの利用条件を満たすアカウントが必要） |
 | `X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET` | 任意 | 設定すると`x_post`/`x_thread`の実投稿ができます |
 
