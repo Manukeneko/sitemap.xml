@@ -1,4 +1,4 @@
-import { callClaudeJson } from "@/lib/ai/providers/claude";
+import { callClaude, callClaudeJson } from "@/lib/ai/providers/claude";
 import { routeTask } from "@/lib/ai/router";
 import { logAiUsage } from "@/lib/ai/costTracker";
 import { rakutenSource } from "@/lib/affiliate/sources/rakuten";
@@ -18,6 +18,37 @@ export interface SelectedProduct {
   rationale: string;
 }
 
+// コンテンツ企画のタイトル（例:「女性向け『引き締めボディ』下半身特化トレ」）を
+// そのままEC検索キーワードに投げても、実在の商品名とは語彙が異なるためヒットしにくい。
+// 安価なモデルで、ECサイトの商品検索に適した短い名詞句に変換してから検索する。
+async function extractSearchKeyword(
+  topic: Topic
+): Promise<{ keyword: string; costUsd: number }> {
+  const decision = routeTask("affiliate_keyword");
+  const prompt = `テーマ「${topic.title}」（カテゴリ: ${topic.category}）に関連して、
+ECサイト（楽天市場など）で実在の商品を検索するのに適した、短い商品名・カテゴリ名の
+キーワードを1つだけ出力してください。記号（『』など）や説明的な文章は含めず、
+シンプルな名詞句のみにしてください（例: コードレス掃除機、プロテイン、洗顔フォーム）。
+
+出力はキーワードの文字列のみ。前置きや説明、記号での装飾は不要です。`;
+  const { text, inputTokens, outputTokens } = await callClaude({
+    model: decision.model,
+    system: "あなたはECサイト向けの検索キーワード抽出アシスタントです。短い名詞句のみを出力してください。",
+    prompt,
+    maxTokens: 32,
+  });
+  const costUsd = await logAiUsage({
+    taskKind: "affiliate_keyword",
+    provider: decision.provider,
+    model: decision.model,
+    inputTokens,
+    outputTokens,
+    relatedTopicId: topic.id,
+  });
+  const keyword = text.trim().replace(/["「」『』\n]/g, "") || topic.title;
+  return { keyword, costUsd };
+}
+
 // アフィリエイトAI（DESIGN.md §10, §12）。
 // 設定済みのアフィリエイトソースから実在の商品候補を取得し、
 // Claudeに「このテーマで紹介すると最も収益期待値が高いか」を判断させる。
@@ -25,8 +56,12 @@ export async function findAffiliateProducts(
   topic: Topic
 ): Promise<{ products: SelectedProduct[]; candidates: AffiliateItem[]; costUsd: number }> {
   const configuredSources = SOURCES.filter((s) => s.isConfigured());
+  const { keyword, costUsd: keywordCostUsd } =
+    configuredSources.length > 0
+      ? await extractSearchKeyword(topic)
+      : { keyword: topic.title, costUsd: 0 };
   const candidatesBySources = await Promise.all(
-    configuredSources.map((s) => s.searchItems(topic.title))
+    configuredSources.map((s) => s.searchItems(keyword))
   );
   const candidates = candidatesBySources.flat();
 
@@ -58,7 +93,7 @@ export async function findAffiliateProducts(
       outputTokens,
       relatedTopicId: topic.id,
     });
-    return { products: data, candidates: [], costUsd };
+    return { products: data, candidates: [], costUsd: keywordCostUsd + costUsd };
   }
 
   const candidateList = candidates
@@ -97,5 +132,5 @@ ${candidateList}
     relatedTopicId: topic.id,
   });
 
-  return { products: data, candidates, costUsd };
+  return { products: data, candidates, costUsd: keywordCostUsd + costUsd };
 }

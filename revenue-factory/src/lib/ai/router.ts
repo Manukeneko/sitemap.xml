@@ -9,6 +9,7 @@ export type TaskKind =
   | "long_form_script"
   | "short_copy"
   | "affiliate_selection"
+  | "affiliate_keyword"
   | "quality_check";
 
 export interface RouteDecision {
@@ -23,6 +24,7 @@ const TASK_MODEL_MAP: Record<TaskKind, string> = {
   long_form_script: "claude-sonnet-5",
   short_copy: "claude-haiku-4-5",
   affiliate_selection: "claude-sonnet-5",
+  affiliate_keyword: "claude-haiku-4-5",
   quality_check: "claude-sonnet-5",
 };
 
