@@ -53,6 +53,10 @@ export const rakutenSource: AffiliateSource = {
       );
     }
 
+    const debugUrl = new URL(url.toString());
+    debugUrl.searchParams.set("accessKey", "***");
+    console.log(`[rakutenSource] request: ${debugUrl.toString()} headers=${JSON.stringify(headers)}`);
+
     try {
       const res = await fetch(url.toString(), { headers });
       if (!res.ok) {
