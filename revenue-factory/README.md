@@ -31,7 +31,7 @@
 
 **Phase 5: 投稿ワークフロー**
 - `approved → scheduled → published` の状態遷移を実装
-- **X (Twitter) API v2への実投稿**（OAuth 1.0a署名を自前実装）に対応。`X_API_KEY`等を設定すると`x_post`/`x_thread`は「実APIで投稿する」ボタンから実際にツイート/スレッドが投稿されます
+- **X (Twitter) API v2への実投稿**（OAuth 1.0a署名を自前実装）に対応。`X_API_KEY`等を設定すると`x_post`/`x_thread`は「実APIで投稿する」ボタンから実際にツイート/スレッドが投稿されます。実クレデンシャルで正規のAPIエンドポイントへの到達・認証は確認済みだが、X側のPay Per Use課金でクレジット残高$0のため実際の投稿成功は未確認（`402 credits depleted`。支払い方法登録後に再確認予定）
 - それ以外の媒体（公式投稿API未接続）は「コピペしてそのまま投稿できるテキスト」を生成する `manualExportPublisher` で代替します
 
 **Phase 7: ROI最適化**
