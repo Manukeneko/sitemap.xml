@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+build/
+dev.db
+dev.db-journal
+*.log
+.env
+.env.local
+.DS_Store
+*.tsbuildinfo
+public/generated/*
+!public/generated/.gitkeep

@@ -1,0 +1,147 @@
+// Phase 1 データベーススキーマ
+// Vercel等のサーバーレス環境はファイルシステムが永続化されないため SQLite は使えない。
+// PostgreSQL (Supabase等) の接続文字列を DATABASE_URL に設定して使う。
+// 詳細は DESIGN.md §9, README.md を参照。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Topic {
+  id             String   @id @default(cuid())
+  title          String
+  category       String
+  searchDemand   Int      @default(0) // 0-100
+  snsDemand      Int      @default(0) // 0-100
+  trendScore     Int      @default(0) // 0-100
+  competition    Int      @default(0) // 0-100 (低いほど狙い目)
+  affiliateScore Int      @default(0) // 0-100
+  productScore   Int      @default(0) // 0-100
+  videoFit       Int      @default(0) // 0-100 動画化しやすさ
+  seoFit         Int      @default(0) // 0-100
+  continuity     Int      @default(0) // 0-100 継続コンテンツ化可能性
+  totalScore     Float    @default(0) // 収益期待値（総合スコア）
+  rationale      String? // AIによるスコアリング根拠（説明可能性のため保存）
+  sourceSignals  String? // JSON文字列: 元になった調査シグナルのスナップショット
+  status         String   @default("candidate") // candidate | planned | archived
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contents Content[]
+  products Product[]
+
+  @@index([totalScore])
+  @@index([status])
+}
+
+model Content {
+  id           String    @id @default(cuid())
+  topicId      String
+  topic        Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  platform     String // youtube_long | youtube_shorts | instagram_reels | instagram_carousel | tiktok | x_post | x_thread | note_free | note_paid | blog_seo | pdf | ebook | template
+  contentType  String // 企画種別（例: script, caption, article）
+  title        String
+  body         String // 台本・原稿・構成のJSON or Markdown
+  status       String    @default("draft") // draft | review | flagged | approved | scheduled | published | failed
+  qualityStatus String   @default("unchecked") // unchecked | passed | flagged（DESIGN.md §20 品質チェックAI）
+  qualityNotes  String? // JSON: 品質チェックAIの指摘事項
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  publishedUrl String? // 実Publisher経由で投稿した場合の投稿URL
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  revenues  Revenue[]
+  analytics Analytics?
+  mediaAssets MediaAsset[]
+
+  @@index([topicId])
+  @@index([status])
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  topicId    String?
+  topic      Topic?   @relation(fields: [topicId], references: [id])
+  name       String
+  category   String // amazon | rakuten | asp | own_pdf | own_course | own_template | app
+  price      Float?
+  commission Float? // 想定報酬額 or 報酬率
+  url        String?
+  score      Float    @default(0) // このテーマに対する紹介優先度スコア
+  createdAt  DateTime @default(now())
+
+  revenues Revenue[]
+
+  @@index([topicId])
+}
+
+model Revenue {
+  id            String   @id @default(cuid())
+  platform      String
+  contentId     String?
+  content       Content? @relation(fields: [contentId], references: [id])
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id])
+  date          DateTime
+  revenueAmount Float    @default(0)
+  clicks        Int      @default(0)
+  conversions   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([contentId])
+  @@index([date])
+}
+
+model Analytics {
+  id          String   @id @default(cuid())
+  contentId   String   @unique
+  content     Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  views       Int      @default(0)
+  impressions Int      @default(0)
+  ctr         Float    @default(0)
+  engagement  Float    @default(0)
+  retention   Float    @default(0)
+  conversions Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
+
+// AI/API 利用コスト記録。収益分析(§14)でコンテンツ単価・ROI判定に使用する。
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  taskKind     String // research_summarize | scoring | planning | long_form_script | short_copy ...
+  provider     String // anthropic | openai | google ...
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Float    @default(0)
+  relatedTopicId   String?
+  relatedContentId String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([relatedTopicId])
+}
+
+// 画像・音声生成物（Phase3、DESIGN.md §3, §11.3）。ローカルファイルシステム(public/generated/)に
+// 保存する初期実装で、本番ではStorageAdapterをSupabase Storage等に差し替える想定。
+model MediaAsset {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  kind      String // image | audio
+  provider  String // openai ...
+  model     String
+  prompt    String?
+  filePath  String // public/ からの相対パス。ブラウザからは /generated/... で参照する
+  mimeType  String
+  costUsd   Float    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([contentId])
+}
