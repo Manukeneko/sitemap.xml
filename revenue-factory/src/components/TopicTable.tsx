@@ -67,6 +67,9 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
   const [exportText, setExportText] = useState<Record<string, string>>({});
   const [revenueInput, setRevenueInput] = useState<Record<string, string>>({});
   const [mediaBusyKey, setMediaBusyKey] = useState<string | null>(null);
+  const [editingContentId, setEditingContentId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Record<string, string>>({});
+  const [editBusyId, setEditBusyId] = useState<string | null>(null);
 
   // ステータス更新系のAPIはmediaAssetsを含まないContentしか返さないため、
   // 既存のmediaAssetsをマージして表示が消えないようにする
@@ -192,6 +195,40 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
       }
     } finally {
       setBusyContentId(null);
+    }
+  }
+
+  function startEdit(contentId: string, currentBody: string, status: string) {
+    setEditingContentId(contentId);
+    setEditDraft((prev) => ({ ...prev, [contentId]: renderBody(currentBody, status) }));
+  }
+
+  async function saveEdit(topicId: string, contentId: string, status: string) {
+    const text = editDraft[contentId] ?? "";
+    if (status !== "draft") {
+      try {
+        JSON.parse(text);
+      } catch {
+        alert("JSON形式が壊れています。構造(波括弧やクォート)を保ったまま編集してください。");
+        return;
+      }
+    }
+    setEditBusyId(contentId);
+    try {
+      const res = await fetch(`/api/contents/${contentId}/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      const json = await res.json().catch(() => ({ error: `サーバーエラー(${res.status})` }));
+      if (res.ok && json.content) {
+        replaceContent(topicId, json.content);
+        setEditingContentId(null);
+      } else {
+        alert(json.error ?? "編集の保存に失敗しました");
+      }
+    } finally {
+      setEditBusyId(null);
     }
   }
 
@@ -337,7 +374,36 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                           {c.platform} ・ {statusLabel(c.status)} ・ {QUALITY_LABELS[c.qualityStatus] ?? c.qualityStatus}
                         </div>
                         <div className="title">{c.title}</div>
-                        <div className="outline">{renderBody(c.body, c.status)}</div>
+                        {editingContentId === c.id ? (
+                          <div style={{ marginTop: 6 }}>
+                            <textarea
+                              style={{ width: "100%", minHeight: 140, fontFamily: "monospace" }}
+                              value={editDraft[c.id] ?? ""}
+                              onChange={(e) =>
+                                setEditDraft((prev) => ({ ...prev, [c.id]: e.target.value }))
+                              }
+                            />
+                            <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
+                              <button
+                                className="secondary"
+                                disabled={editBusyId === c.id}
+                                onClick={() => saveEdit(topic.id, c.id, c.status)}
+                              >
+                                {editBusyId === c.id ? "保存中..." : "保存する"}
+                              </button>
+                              <button className="secondary" onClick={() => setEditingContentId(null)}>
+                                キャンセル
+                              </button>
+                            </div>
+                            {c.status !== "draft" && (
+                              <div className="topic-meta" style={{ marginTop: 4 }}>
+                                JSON形式のまま編集してください。保存すると品質チェックはやり直しになります。
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="outline">{renderBody(c.body, c.status)}</div>
+                        )}
 
                         {c.qualityNotes && (c.status === "flagged" || c.qualityStatus === "flagged") && (
                           <div className="outline" style={{ color: "var(--warn)" }}>
@@ -346,6 +412,14 @@ export function TopicTable({ topics: initialTopics }: { topics: Topic[] }) {
                         )}
 
                         <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {c.status !== "published" && editingContentId !== c.id && (
+                            <button
+                              className="secondary"
+                              onClick={() => startEdit(c.id, c.body, c.status)}
+                            >
+                              編集する
+                            </button>
+                          )}
                           {c.status === "draft" && (
                             <button
                               className="secondary"
